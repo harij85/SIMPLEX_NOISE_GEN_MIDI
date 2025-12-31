@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D Simplex Noise MIDI Instrument</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      overflow: hidden;
+      background: #0a0a0a;
+      color: #fff;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #ui {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      background: rgba(10, 10, 10, 0.8);
+      backdrop-filter: blur(10px);
+      padding: 20px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      min-width: 280px;
+    }
+
+    h1 {
+      font-size: 18px;
+      margin-bottom: 5px;
+      font-weight: 600;
+    }
+
+    .subtitle {
+      font-size: 12px;
+      color: #888;
+      margin-bottom: 20px;
+    }
+
+    button {
+      width: 100%;
+      padding: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.2s;
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    }
+
+    button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    .info {
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+      font-size: 12px;
+      line-height: 1.6;
+      color: #aaa;
+    }
+
+    .info strong {
+      color: #fff;
+    }
+
+    .controls {
+      margin-top: 20px;
+    }
+
+    .control-group {
+      margin-bottom: 15px;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      color: #aaa;
+      margin-bottom: 5px;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 2px;
+      outline: none;
+      -webkit-appearance: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      cursor: pointer;
+      box-shadow: 0 2px 6px rgba(102, 126, 234, 0.4);
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      cursor: pointer;
+      border: none;
+      box-shadow: 0 2px 6px rgba(102, 126, 234, 0.4);
+    }
+
+    .value {
+      display: inline-block;
+      float: right;
+      color: #667eea;
+      font-weight: 600;
+    }
+
+    .legend {
+      margin-top: 15px;
+      padding: 10px;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 6px;
+      font-size: 11px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      margin-bottom: 5px;
+    }
+
+    .legend-color {
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+      margin-right: 8px;
+    }
+
+    select {
+      width: 100%;
+      padding: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      outline: none;
+    }
+
+    select:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .toggle-group {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .toggle-switch {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+
+    .toggle-switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .toggle-slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(255, 255, 255, 0.1);
+      transition: 0.3s;
+      border-radius: 24px;
+    }
+
+    .toggle-slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: 0.3s;
+      border-radius: 50%;
+    }
+
+    input:checked + .toggle-slider {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    input:checked + .toggle-slider:before {
+      transform: translateX(20px);
+    }
+
+    .toggle-label {
+      font-size: 12px;
+      color: #aaa;
+      flex-grow: 1;
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    .file-button {
+      width: 100%;
+      padding: 10px;
+      font-size: 13px;
+      font-weight: 500;
+      background: rgba(255, 255, 255, 0.1);
+      color: #fff;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+    }
+
+    .file-button:hover {
+      background: rgba(255, 255, 255, 0.15);
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+
+    .scale-section {
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .section-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 12px;
+    }
+
+    #scalaFileName {
+      font-size: 11px;
+      color: #667eea;
+      margin-top: 5px;
+      min-height: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div id="ui">
+    <h1>3D Noise MIDI Instrument</h1>
+    <p class="subtitle">Spatial pressure field sequencer</p>
+    
+    <button id="startBtn">▶ Start MIDI Sequencer</button>
+
+    <div class="controls">
+      <div class="control-group">
+        <label>
+          BPM
+          <span class="value" id="bpmValue">120</span>
+        </label>
+        <input type="range" id="bpmSlider" min="0" max="240" step="5" value="120">
+      </div>
+
+      <div class="control-group">
+        <label>
+          Steps
+          <span class="value" id="stepsValue">16</span>
+        </label>
+        <input type="range" id="stepsSlider" min="4" max="32" step="1" value="16">
+      </div>
+
+      <div class="control-group">
+        <label>
+          Time Signature
+          <span class="value" id="timeSigValue">4/4</span>
+        </label>
+        <div style="display: flex; gap: 10px; margin-bottom: 8px;">
+          <div style="flex: 1;">
+            <label style="font-size: 10px; margin-bottom: 3px;">Numerator (1-256)</label>
+            <input type="range" id="numeratorSlider" min="1" max="256" step="1" value="4">
+          </div>
+          <div style="flex: 1;">
+            <label style="font-size: 10px; margin-bottom: 3px;">Denominator</label>
+            <input type="range" id="denominatorSlider" min="1" max="8" step="1" value="3">
+          </div>
+        </div>
+        <div class="toggle-group" style="margin-top: 8px;">
+          <label class="toggle-switch">
+            <input type="checkbox" id="newComplexityToggle">
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="toggle-label">New Complexity (Irrational)</span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 8px;">
+          <button class="preset-btn" data-preset="4/4" style="padding: 4px; font-size: 10px; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 3px; color: #aaa; cursor: pointer;">4/4</button>
+          <button class="preset-btn" data-preset="3/4" style="padding: 4px; font-size: 10px; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 3px; color: #aaa; cursor: pointer;">3/4</button>
+          <button class="preset-btn" data-preset="6/8" style="padding: 4px; font-size: 10px; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 3px; color: #aaa; cursor: pointer;">6/8</button>
+          <button class="preset-btn" data-preset="2/2" style="padding: 4px; font-size: 10px; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 3px; color: #aaa; cursor: pointer;">2/2</button>
+          <button class="preset-btn" data-preset="5/4" style="padding: 4px; font-size: 10px; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 3px; color: #aaa; cursor: pointer;">5/4</button>
+          <button class="preset-btn" data-preset="7/8" style="padding: 4px; font-size: 10px; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 3px; color: #aaa; cursor: pointer;">7/8</button>
+          <button class="preset-btn" data-preset="12/8" style="padding: 4px; font-size: 10px; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 3px; color: #aaa; cursor: pointer;">12/8 Trip</button>
+          <button class="preset-btn" data-preset="9/8" style="padding: 4px; font-size: 10px; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 3px; color: #aaa; cursor: pointer;">9/8 Trip</button>
+          <button class="preset-btn" data-preset="3/16" style="padding: 4px; font-size: 10px; background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 3px; color: #aaa; cursor: pointer;">3/16</button>
+        </div>
+        <button id="stockhausenPreset" style="width: 100%; padding: 6px; font-size: 11px; margin-top: 6px; background: rgba(102, 126, 234, 0.2); border: 1px solid rgba(102, 126, 234, 0.4); border-radius: 4px; color: #667eea; cursor: pointer;">
+          ⚡ Stockhausen 176/128
+        </button>
+      </div>
+
+      <div class="control-group">
+        <label>
+          Spatial Scale
+          <span class="value" id="spatialValue">0.50</span>
+        </label>
+        <input type="range" id="spatialScale" min="0.1" max="2.0" step="0.05" value="0.5">
+      </div>
+
+      <div class="control-group">
+        <label>
+          Time Scale
+          <span class="value" id="timeValue">0.30</span>
+        </label>
+        <input type="range" id="timeScale" min="0.0" max="1.0" step="0.05" value="0.3">
+      </div>
+
+      <div class="control-group">
+        <label>
+          Sensor Distribution
+          <span class="value" id="distributionValue">Line</span>
+        </label>
+        <input type="range" id="distributionSlider" min="0.0" max="1.0" step="0.01" value="0.0">
+      </div>
+
+      <div class="control-group">
+        <label>
+          Sensor Animation Speed
+          <span class="value" id="animationValue">0.00</span>
+        </label>
+        <input type="range" id="animationSlider" min="0.0" max="2.0" step="0.1" value="0.0">
+      </div>
+    </div>
+
+    <div class="scale-section">
+      <div class="section-title">Musical Scale</div>
+
+      <div class="toggle-group">
+        <label class="toggle-switch">
+          <input type="checkbox" id="scaleToggle">
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label">Enable Scale Quantization</span>
+      </div>
+
+      <div class="control-group">
+        <label>Key</label>
+        <select id="keySelect">
+          <option value="0">C</option>
+          <option value="1">C# / Db</option>
+          <option value="2">D</option>
+          <option value="3">D# / Eb</option>
+          <option value="4">E</option>
+          <option value="5">F</option>
+          <option value="6">F# / Gb</option>
+          <option value="7">G</option>
+          <option value="8">G# / Ab</option>
+          <option value="9">A</option>
+          <option value="10">A# / Bb</option>
+          <option value="11">B</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label>Scale Preset</label>
+        <select id="scaleSelect">
+          <option value="chromatic">Chromatic (All Notes)</option>
+          <option value="major">Major</option>
+          <option value="minor">Natural Minor</option>
+          <option value="dorian">Dorian</option>
+          <option value="phrygian">Phrygian</option>
+          <option value="lydian">Lydian</option>
+          <option value="mixolydian">Mixolydian</option>
+          <option value="locrian">Locrian</option>
+          <option value="pentatonic-major">Pentatonic Major</option>
+          <option value="pentatonic-minor">Pentatonic Minor</option>
+          <option value="blues">Blues</option>
+          <option value="harmonic-minor">Harmonic Minor</option>
+          <option value="melodic-minor">Melodic Minor</option>
+          <option value="whole-tone">Whole Tone</option>
+          <option value="diminished">Diminished</option>
+        </select>
+      </div>
+
+      <div class="control-group">
+        <label for="scalaFileInput" class="file-button">
+          📁 Import Scala File (.scl)
+        </label>
+        <input type="file" id="scalaFileInput" accept=".scl">
+        <div id="scalaFileName"></div>
+      </div>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item">
+        <div class="legend-color" style="background: #000080;"></div>
+        Low noise → Low notes
+      </div>
+      <div class="legend-item">
+        <div class="legend-color" style="background: #00ff80;"></div>
+        Mid noise → Mid notes
+      </div>
+      <div class="legend-item">
+        <div class="legend-color" style="background: #ff3300;"></div>
+        High noise → High notes
+      </div>
+    </div>
+
+    <div class="info">
+      <strong>How it works:</strong><br>
+      • 16 sensors sample the 3D noise field<br>
+      • Each sensor reads a point in space<br>
+      • Noise values map to MIDI notes<br>
+      • BPM: 120 (16th note steps)<br>
+      <br>
+      <strong>Controls:</strong><br>
+      • Drag to rotate the sphere<br>
+      • Scroll to zoom<br>
+      • Adjust sliders to modify sound
+    </div>
+  </div>
+
+  <script type="module" src="/threejs-3d-noise-midi.js"></script>
+</body>
+</html>
