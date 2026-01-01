@@ -32,6 +32,8 @@
       border-radius: 12px;
       border: 1px solid rgba(255, 255, 255, 0.1);
       min-width: 280px;
+      max-height: calc(100vh - 40px);
+      overflow-y: auto;
     }
 
     h1 {
@@ -271,6 +273,69 @@
       margin-top: 5px;
       min-height: 14px;
     }
+
+    /* Noise Palette Styles */
+    #noisePalette {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: rgba(10, 10, 10, 0.8);
+      backdrop-filter: blur(10px);
+      padding: 15px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      max-width: 280px;
+    }
+
+    .palette-title {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #fff;
+    }
+
+    .noise-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+
+    .noise-option {
+      position: relative;
+      cursor: pointer;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 2px solid transparent;
+      transition: all 0.2s;
+    }
+
+    .noise-option:hover {
+      border-color: rgba(102, 126, 234, 0.5);
+      transform: scale(1.05);
+    }
+
+    .noise-option.active {
+      border-color: #667eea;
+      box-shadow: 0 0 20px rgba(102, 126, 234, 0.4);
+    }
+
+    .noise-option canvas {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .noise-label {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 4px 8px;
+      font-size: 11px;
+      text-align: center;
+      color: #fff;
+    }
   </style>
 </head>
 <body>
@@ -366,6 +431,67 @@
         </label>
         <input type="range" id="animationSlider" min="0.0" max="2.0" step="0.1" value="0.0">
       </div>
+
+      <div class="control-group">
+        <label>
+          Mountain/Valley Height
+          <span class="value" id="displacementValue">0.30</span>
+        </label>
+        <input type="range" id="displacementSlider" min="0.0" max="0.8" step="0.05" value="0.3">
+      </div>
+    </div>
+
+    <div class="scale-section">
+      <div class="section-title">Color Gradient</div>
+
+      <div style="font-size: 11px; color: #888; margin-bottom: 10px;">
+        Customize the noise-to-color gradient with 5 color stops
+      </div>
+
+      <div class="control-group">
+        <label>Color 1 (Low Noise)</label>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input type="color" id="color1" value="#0d0d66" style="width: 40px; height: 30px; border: none; border-radius: 4px; cursor: pointer;">
+          <input type="range" id="color1Alpha" min="0" max="1" step="0.01" value="1.0" style="flex: 1;">
+          <span class="value" id="color1AlphaValue" style="min-width: 35px;">1.00</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Color 2</label>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input type="color" id="color2" value="#0066e6" style="width: 40px; height: 30px; border: none; border-radius: 4px; cursor: pointer;">
+          <input type="range" id="color2Alpha" min="0" max="1" step="0.01" value="1.0" style="flex: 1;">
+          <span class="value" id="color2AlphaValue" style="min-width: 35px;">1.00</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Color 3 (Mid Noise)</label>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input type="color" id="color3" value="#00ccb3" style="width: 40px; height: 30px; border: none; border-radius: 4px; cursor: pointer;">
+          <input type="range" id="color3Alpha" min="0" max="1" step="0.01" value="1.0" style="flex: 1;">
+          <span class="value" id="color3AlphaValue" style="min-width: 35px;">1.00</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Color 4</label>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input type="color" id="color4" value="#ffcc1a" style="width: 40px; height: 30px; border: none; border-radius: 4px; cursor: pointer;">
+          <input type="range" id="color4Alpha" min="0" max="1" step="0.01" value="1.0" style="flex: 1;">
+          <span class="value" id="color4AlphaValue" style="min-width: 35px;">1.00</span>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Color 5 (High Noise)</label>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input type="color" id="color5" value="#ff4d99" style="width: 40px; height: 30px; border: none; border-radius: 4px; cursor: pointer;">
+          <input type="range" id="color5Alpha" min="0" max="1" step="0.01" value="1.0" style="flex: 1;">
+          <span class="value" id="color5AlphaValue" style="min-width: 35px;">1.00</span>
+        </div>
+      </div>
     </div>
 
     <div class="scale-section">
@@ -427,6 +553,138 @@
       </div>
     </div>
 
+    <div class="scale-section">
+      <div class="section-title">Step Sequencer Parameters</div>
+
+      <div style="font-size: 11px; color: #888; margin-bottom: 10px;">
+        Click a step number to edit its parameters
+      </div>
+
+      <div id="stepGrid" style="display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; margin-bottom: 15px;">
+        <!-- Step buttons will be generated here -->
+      </div>
+
+      <div id="stepEditor" style="display: none; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 6px; margin-bottom: 10px;">
+        <div style="font-size: 12px; font-weight: 600; margin-bottom: 10px; color: #667eea;">
+          Step <span id="editingStepNum"></span>
+        </div>
+
+        <div class="toggle-group">
+          <label class="toggle-switch">
+            <input type="checkbox" id="stepActive" checked>
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="toggle-label">Active (unchecked = rest)</span>
+        </div>
+
+        <div class="toggle-group">
+          <label class="toggle-switch">
+            <input type="checkbox" id="stepDotted">
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="toggle-label">Dotted (1.5x duration)</span>
+        </div>
+
+        <div class="toggle-group">
+          <label class="toggle-switch">
+            <input type="checkbox" id="stepTie">
+            <span class="toggle-slider"></span>
+          </label>
+          <span class="toggle-label">Tie to next step</span>
+        </div>
+
+        <div class="control-group">
+          <label>Scale Degree (I-VII)</label>
+          <select id="stepScaleDegree">
+            <option value="">Auto (from noise)</option>
+            <option value="1">I (Root)</option>
+            <option value="2">II (Supertonic)</option>
+            <option value="3">III (Mediant)</option>
+            <option value="4">IV (Subdominant)</option>
+            <option value="5">V (Dominant)</option>
+            <option value="6">VI (Submediant)</option>
+            <option value="7">VII (Leading Tone)</option>
+          </select>
+        </div>
+
+        <div class="control-group">
+          <label>
+            Velocity
+            <span class="value" id="stepVelocityValue">80</span>
+          </label>
+          <input type="range" id="stepVelocity" min="1" max="127" value="80">
+        </div>
+      </div>
+    </div>
+
+    <div class="scale-section">
+      <div class="section-title">Clay Molding</div>
+
+      <div style="font-size: 11px; color: #888; margin-bottom: 10px;">
+        Hold <strong>Shift</strong> and click-drag on the sphere to mold it like wet clay
+      </div>
+
+      <div class="control-group">
+        <label>
+          Viscosity (Stickiness)
+          <span class="value" id="clayViscosityValue">0.92</span>
+        </label>
+        <input type="range" id="clayViscositySlider" min="0.85" max="0.99" step="0.01" value="0.92">
+      </div>
+
+      <div class="control-group">
+        <label>
+          Elasticity (Return Force)
+          <span class="value" id="clayElasticityValue">0.05</span>
+        </label>
+        <input type="range" id="clayElasticitySlider" min="0.0" max="0.2" step="0.01" value="0.05">
+      </div>
+
+      <div class="control-group">
+        <label>
+          Push Strength
+          <span class="value" id="clayPushValue">0.15</span>
+        </label>
+        <input type="range" id="clayPushSlider" min="0.05" max="0.5" step="0.05" value="0.15">
+      </div>
+
+      <div class="control-group">
+        <label>
+          Brush Size
+          <span class="value" id="clayBrushValue">0.30</span>
+        </label>
+        <input type="range" id="clayBrushSlider" min="0.1" max="0.8" step="0.05" value="0.30">
+      </div>
+
+      <button id="resetClayBtn" style="width: 100%; padding: 10px; font-size: 13px; margin-top: 8px; background: rgba(255, 100, 100, 0.2); border: 1px solid rgba(255, 100, 100, 0.4); border-radius: 6px; color: #ff6464; cursor: pointer;">
+        🔄 Reset Clay Shape
+      </button>
+    </div>
+
+    <div class="scale-section">
+      <div class="section-title">MIDI Input</div>
+
+      <div class="toggle-group">
+        <label class="toggle-switch">
+          <input type="checkbox" id="midiInputToggle" checked>
+          <span class="toggle-slider"></span>
+        </label>
+        <span class="toggle-label">Enable MIDI Input</span>
+      </div>
+
+      <div style="font-size: 11px; color: #888; margin-bottom: 10px;">
+        Play external MIDI devices or software to control the instrument. Notes trigger sensors, pitch bend affects strings, and CC1 (mod wheel) modulates spatial scale.
+      </div>
+
+      <div id="midiInputStatus" style="padding: 10px; background: rgba(100, 200, 100, 0.1); border: 1px solid rgba(100, 200, 100, 0.3); border-radius: 6px; font-size: 11px; color: #6c6;">
+        ✓ MIDI Input listening
+      </div>
+
+      <div id="midiInputActivity" style="margin-top: 10px; padding: 8px; background: rgba(0, 0, 0, 0.3); border-radius: 6px; font-size: 10px; font-family: monospace; color: #aaa; max-height: 100px; overflow-y: auto;">
+        Waiting for MIDI messages...
+      </div>
+    </div>
+
     <div class="legend">
       <div class="legend-item">
         <div class="legend-color" style="background: #000080;"></div>
@@ -444,15 +702,25 @@
 
     <div class="info">
       <strong>How it works:</strong><br>
-      • 16 sensors sample the 3D noise field<br>
+      • Sensors sample the 3D noise field<br>
       • Each sensor reads a point in space<br>
       • Noise values map to MIDI notes<br>
-      • BPM: 120 (16th note steps)<br>
+      • Evolving noise creates musical patterns<br>
       <br>
       <strong>Controls:</strong><br>
-      • Drag to rotate the sphere<br>
-      • Scroll to zoom<br>
-      • Adjust sliders to modify sound
+      • <strong>Drag</strong> to rotate the sphere<br>
+      • <strong>Scroll</strong> to zoom<br>
+      • <strong>Shift + Drag</strong> on sphere to mold it like clay<br>
+      • <strong>Click</strong> strings to interact with pitch bend<br>
+      • Adjust sliders to modify sound and physics
+    </div>
+  </div>
+
+  <!-- Noise Shader Palette -->
+  <div id="noisePalette">
+    <div class="palette-title">Noise Shaders</div>
+    <div class="noise-grid" id="noiseGrid">
+      <!-- Noise options will be generated here -->
     </div>
   </div>
 
