@@ -172,3 +172,55 @@ export function clearTubeStrings() {
 
   tubeSegments.length = 0;
 }
+
+/**
+ * Create strings array (alias for createTubeStrings but returns meshes)
+ * @param {Array<THREE.Vector3>} positions - Sensor positions
+ * @returns {Array<THREE.Mesh>} Array of string meshes
+ */
+export function createStrings(positions) {
+  const meshes = [];
+  positions.forEach((pos, i) => {
+    const segment = createTubeString(pos, new THREE.Vector3(0, 0, 0), i, null);
+    meshes.push(segment.mesh);
+  });
+  return meshes;
+}
+
+/**
+ * Update string geometry (alias for updateTubeGeometry)
+ * @param {THREE.Mesh} stringMesh - String mesh to update
+ * @param {THREE.Vector3} position - Sensor position
+ * @param {THREE.Vector3} displacement - Displacement vector
+ */
+export function updateStringGeometry(stringMesh, position, displacement) {
+  // Find index of this mesh
+  const index = tubeSegments.findIndex(seg => seg.mesh === stringMesh);
+  if (index !== -1) {
+    const direction = position.clone().normalize();
+    const end = position.clone().add(direction.multiplyScalar(0.1));
+    updateTubeGeometry(index, position, end, displacement);
+  }
+}
+
+/**
+ * Update string visuals based on physics
+ * @param {Array<THREE.Mesh>} stringMeshes - String meshes
+ * @param {Array<Object>} stringPhysicsArray - Physics objects
+ */
+export function updateStringVisuals(stringMeshes, stringPhysicsArray) {
+  stringMeshes.forEach((mesh, i) => {
+    const physics = stringPhysicsArray[i];
+    if (physics && physics.isVibrating) {
+      // Visual feedback for vibrating strings
+      const intensity = physics.displacement.length();
+      if (mesh.material) {
+        mesh.material.opacity = 0.5 + intensity * 2;
+      }
+    } else {
+      if (mesh.material) {
+        mesh.material.opacity = 0.5;
+      }
+    }
+  });
+}

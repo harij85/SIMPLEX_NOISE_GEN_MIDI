@@ -246,3 +246,38 @@ export function parseScalaFile(text) {
 
   return [...new Set(notes)].sort((a, b) => a - b);
 }
+
+/**
+ * Set root note (alias for setCurrentKey)
+ * @param {number} note - Root note (0-11)
+ */
+export function setRootNote(note) {
+  setCurrentKey(note);
+}
+
+/**
+ * Set scale intervals from preset name
+ * @param {string} scaleName - Scale name
+ */
+export function setScaleIntervals(scaleName) {
+  setCurrentScale(scaleName);
+}
+
+/**
+ * Load Scala file (alias for parseScalaFile)
+ * @param {string} text - Scala file content
+ */
+export function loadScalaFile(text) {
+  const intervals = parseScalaFile(text);
+  if (intervals) {
+    setCustomScalaScale(intervals);
+  }
+}
+
+/**
+ * Get current scale name
+ * @returns {string} Scale name
+ */
+export function getScaleName() {
+  return getCurrentScale();
+}
