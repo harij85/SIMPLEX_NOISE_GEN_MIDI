@@ -8,11 +8,10 @@
 import * as THREE from 'three';
 
 // Configuration
-import { SEQUENCER_DEFAULTS, MIDI_CONFIG } from './config/constants.js';
 import {
   getNumSteps, setNumSteps,
-  getCurrentStep, setCurrentStep,
-  getTime, setTime, updateTime,
+  getCurrentStep,
+  updateTime,
   setMousePosition,
   getActiveString, setActiveString,
   setEditingStep, getEditingStep,
@@ -22,13 +21,8 @@ import {
 } from './config/globalState.js';
 
 // MIDI System
-import { initMIDI, sendMIDIMessage, getMIDIOutput, isMIDIReady } from './midi/midiIO.js';
-import {
-  setMIDIInputEnabled,
-  isMIDIInputEnabled,
-  getActiveNotes,
-  getPitchBend
-} from './midi/midiState.js';
+import { initMIDI, sendMIDIMessage } from './midi/midiIO.js';
+import { setMIDIInputEnabled } from './midi/midiState.js';
 import {
   setNoteOnCallback,
   setNoteOffCallback,
@@ -42,11 +36,9 @@ import {
   createStringPhysics,
   pluckString,
   updateStringPhysicsStep,
-  applyStringDisplacement,
-  getStringPhysics
+  applyStringDisplacement
 } from './physics/stringPhysics.js';
 import {
-  addClayDeformation,
   updateClayPhysics,
   getDeformationsForShader,
   setClayViscosity,
@@ -55,16 +47,11 @@ import {
   setClayBrushSize,
   clearDeformations,
   setMoldingState,
-  isMolding,
   moldAtPoint
 } from './physics/clayPhysics.js';
 
 // Sequencer
-import {
-  setBPM, getBPM,
-  setTimeSig, getTimeSigNumerator, getTimeSigDenominator,
-  calculateStepMS
-} from './sequencer/scheduler.js';
+import { setBPM, setTimeSig } from './sequencer/scheduler.js';
 import {
   initStepParameters,
   getStepParameters,
@@ -88,7 +75,6 @@ import {
 import {
   initScene,
   getRenderer,
-  getScene,
   getCamera,
   updateControls,
   enableControls,
@@ -96,15 +82,10 @@ import {
   render,
   getNoiseRotationGroup
 } from './scene/sceneManager.js';
-import {
-  addAmbientLight,
-  clearLights,
-  updateLights
-} from './scene/lighting.js';
+import { addAmbientLight } from './scene/lighting.js';
 import {
   createSensors,
   updateSensorPositions,
-  getSensorPositions,
   highlightBeacon,
   updateBeaconAnimations
 } from './scene/sensors.js';
@@ -125,16 +106,11 @@ import {
 } from './shaders/samplingShader.js';
 
 // Utils
-import { logActivity } from './utils/logger.js';
 import {
   setScaleEnabled,
-  isScaleEnabled,
   setRootNote,
   setScaleIntervals,
-  loadScalaFile,
-  quantizeToScale,
-  scaleDegreeToMidiNote,
-  getScaleName
+  loadScalaFile
 } from './utils/scales.js';
 import { createFibonacciSphere } from './utils/geometry.js';
 
