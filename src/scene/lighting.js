@@ -117,3 +117,33 @@ export function clearSensorLights() {
   });
   sensorPointLights.length = 0;
 }
+
+/**
+ * Add ambient light to scene
+ * @param {number} color - Light color (hex)
+ * @param {number} intensity - Light intensity
+ */
+export function addAmbientLight(color, intensity) {
+  ambientLight = new THREE.AmbientLight(color, intensity);
+  addToScene(ambientLight);
+  return ambientLight;
+}
+
+/**
+ * Clear all lights from scene
+ */
+export function clearLights() {
+  if (ambientLight && ambientLight.parent) {
+    ambientLight.parent.remove(ambientLight);
+    ambientLight = null;
+  }
+  clearSensorLights();
+}
+
+/**
+ * Update lights (placeholder for dynamic light updates)
+ */
+export function updateLights() {
+  // Currently no dynamic updates needed
+  // This function exists for future light animation
+}
