@@ -6,8 +6,9 @@
  */
 
 // MIDI Devices
-let midiOutput = null;
 let midiInput = null;
+let midiOutput = null;
+
 
 /**
  * Initialize Web MIDI API
@@ -79,10 +80,15 @@ export function attachMIDIInputHandler(handler) {
 /**
  * Send MIDI message to output
  * @param {Array<number>} message - MIDI message bytes [status, data1, data2]
+ * @param {number} timestamp - Optional timestamp in milliseconds for scheduling
  */
-export function sendMIDIMessage(message) {
+export function sendMIDIMessage(message, timestamp = 0) {
   if (midiOutput) {
-    midiOutput.send(message);
+    if (timestamp > 0) {
+      midiOutput.send(message, timestamp);
+    } else {
+      midiOutput.send(message);
+    }
   }
 }
 
