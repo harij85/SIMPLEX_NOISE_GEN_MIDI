@@ -186,3 +186,21 @@ export function removeFromScene(object) {
 export function getRendererDomElement() {
   return renderer ? renderer.domElement : null;
 }
+
+/**
+ * Enable orbit controls
+ */
+export function enableControls() {
+  if (controls) {
+    controls.enabled = true;
+  }
+}
+
+/**
+ * Disable orbit controls
+ */
+export function disableControls() {
+  if (controls) {
+    controls.enabled = false;
+  }
+}
