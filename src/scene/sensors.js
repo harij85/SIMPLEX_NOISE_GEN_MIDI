@@ -139,3 +139,75 @@ export function clearBeacons() {
   beaconElements.length = 0;
   beaconTops.length = 0;
 }
+
+/**
+ * Create sensor array and return beacon meshes
+ * @param {Array<THREE.Vector3>} positions - Sensor positions
+ * @returns {Array<THREE.Mesh>} Array of beacon meshes
+ */
+export function createSensors(positions) {
+  const meshes = [];
+  positions.forEach(pos => {
+    const element = createBeacon(pos, null);
+    meshes.push(element.topSphere);
+  });
+  return meshes;
+}
+
+/**
+ * Update sensor positions based on distribution
+ * @param {Array<THREE.Mesh>} beacons - Beacon meshes
+ * @param {Array<THREE.Vector3>} basePositions - Base positions
+ * @param {number} distribution - Distribution factor (0-1)
+ * @param {number} animationSpeed - Animation speed
+ * @param {number} time - Current time
+ */
+export function updateSensorPositions(beacons, basePositions, distribution, animationSpeed, time) {
+  // Update beacon positions based on distribution
+  // This is a placeholder - actual implementation would handle distribution
+  beacons.forEach((beacon, i) => {
+    if (basePositions[i]) {
+      const direction = basePositions[i].clone().normalize();
+      const beaconPos = basePositions[i].clone().add(
+        direction.multiplyScalar(SCENE_CONFIG.BEACON_HEIGHT)
+      );
+      beacon.position.copy(beaconPos);
+    }
+  });
+}
+
+/**
+ * Get sensor positions
+ * @returns {Array<THREE.Vector3>} Sensor positions
+ */
+export function getSensorPositions() {
+  return beaconTops;
+}
+
+/**
+ * Highlight a beacon (flash effect)
+ * @param {THREE.Mesh} beacon - Beacon mesh to highlight
+ */
+export function highlightBeacon(beacon) {
+  if (beacon && beacon.material) {
+    // Flash effect - temporarily increase opacity
+    beacon.material.opacity = 1.0;
+    setTimeout(() => {
+      beacon.material.opacity = 0.9;
+    }, 100);
+  }
+}
+
+/**
+ * Update beacon animations
+ * @param {Array<THREE.Mesh>} beacons - Beacon meshes
+ */
+export function updateBeaconAnimations(beacons) {
+  // Beacon animations (pulsing, etc.)
+  // This is a placeholder for future animation logic
+  beacons.forEach((beacon, i) => {
+    if (beacon.material.opacity > 0.9) {
+      beacon.material.opacity = Math.max(0.9, beacon.material.opacity - 0.05);
+    }
+  });
+}
