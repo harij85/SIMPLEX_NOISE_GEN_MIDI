@@ -825,63 +825,139 @@ function openStepEditor(stepIndex) {
 }
 
 /**
- * Generate noise shader palette with WebGL-rendered previews
+ * 2D Perlin noise implementation for previews
+ */
+function perlinNoise2D(x, y) {
+  const fade = (t) => t * t * t * (t * (t * 6 - 15) + 10);
+  const lerp = (a, b, t) => a + t * (b - a);
+
+  const X = Math.floor(x) & 255;
+  const Y = Math.floor(y) & 255;
+
+  const xf = x - Math.floor(x);
+  const yf = y - Math.floor(y);
+
+  const u = fade(xf);
+  const v = fade(yf);
+
+  const grad = (hash, x, y) => {
+    const h = hash & 3;
+    return ((h & 1) ? x : -x) + ((h & 2) ? y : -y);
+  };
+
+  const hash = (i) => {
+    i = (i << 13) ^ i;
+    return (i * (i * i * 15731 + 789221) + 1376312589) & 0x7fffffff;
+  };
+
+  const aa = grad(hash(X + hash(Y)), xf, yf);
+  const ba = grad(hash(X + 1 + hash(Y)), xf - 1, yf);
+  const ab = grad(hash(X + hash(Y + 1)), xf, yf - 1);
+  const bb = grad(hash(X + 1 + hash(Y + 1)), xf - 1, yf - 1);
+
+  return lerp(lerp(aa, ba, u), lerp(ab, bb, u), v);
+}
+
+/**
+ * Generate 256x256 noise preview bitmap
+ */
+function generateNoisePreview(noiseType, size = 256) {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const imageData = ctx.createImageData(size, size);
+
+  const scale = 0.05;
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      let value = 0;
+
+      switch(noiseType) {
+        case 'simplex':
+          value = Math.sin(x * scale) * Math.cos(y * scale) +
+                  Math.sin(x * scale * 2) * Math.cos(y * scale * 2) * 0.5;
+          break;
+
+        case 'perlin':
+          value = perlinNoise2D(x * scale, y * scale);
+          break;
+
+        case 'fbm':
+          let amplitude = 1.0;
+          let frequency = scale;
+          for (let i = 0; i < 4; i++) {
+            value += perlinNoise2D(x * frequency, y * frequency) * amplitude;
+            amplitude *= 0.5;
+            frequency *= 2.0;
+          }
+          break;
+
+        case 'voronoi':
+          const cellSize = 16;
+          const cellX = Math.floor(x / cellSize);
+          const cellY = Math.floor(y / cellSize);
+          let minDist = Infinity;
+
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              const seedX = (cellX + dx) * cellSize + ((cellX + dx) * 73) % cellSize;
+              const seedY = (cellY + dy) * cellSize + ((cellY + dy) * 149) % cellSize;
+              const dist = Math.sqrt((x - seedX) ** 2 + (y - seedY) ** 2);
+              minDist = Math.min(minDist, dist);
+            }
+          }
+          value = minDist / cellSize;
+          break;
+
+        case 'ridged':
+          value = Math.abs(perlinNoise2D(x * scale, y * scale));
+          value = 1.0 - value;
+          value = value * value;
+          break;
+
+        case 'cellular':
+          value = Math.sin(x * scale * 3) * Math.cos(y * scale * 3);
+          value = value > 0 ? 1 : -1;
+          break;
+      }
+
+      const normalized = ((value + 1) / 2) * 255;
+      const idx = (y * size + x) * 4;
+      imageData.data[idx] = normalized;
+      imageData.data[idx + 1] = normalized;
+      imageData.data[idx + 2] = normalized;
+      imageData.data[idx + 3] = 255;
+    }
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+  return canvas;
+}
+
+/**
+ * Generate noise shader palette with 256x256 bitmaps
  */
 function generateNoisePalette() {
   const noiseGrid = document.getElementById('noiseGrid');
   const noiseTypes = ['simplex', 'perlin', 'fbm', 'voronoi', 'ridged', 'cellular'];
-  const renderer = getRenderer();
+  const noiseNames = ['Simplex', 'Perlin', 'FBM', 'Voronoi', 'Ridged', 'Cellular'];
 
-  // Create preview scene and camera
-  const previewScene = new THREE.Scene();
-  const previewCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-  const previewRenderTarget = new THREE.WebGLRenderTarget(256, 256);
-
-  noiseTypes.forEach(noiseType => {
+  noiseTypes.forEach((noiseType, index) => {
     const option = document.createElement('div');
     option.className = 'noise-option';
     if (noiseType === getCurrentNoiseType()) {
       option.classList.add('active');
     }
 
-    const canvas = document.createElement('canvas');
-    canvas.width = 256;
-    canvas.height = 256;
-    const ctx = canvas.getContext('2d');
-
-    // Create a plane with noise material for preview
-    const previewMaterial = createNoiseMaterial(noiseType);
-    previewMaterial.uniforms.uTime.value = 0;
-    const previewGeometry = new THREE.PlaneGeometry(2, 2);
-    const previewPlane = new THREE.Mesh(previewGeometry, previewMaterial);
-    previewScene.add(previewPlane);
-
-    // Render noise to render target
-    renderer.setRenderTarget(previewRenderTarget);
-    renderer.render(previewScene, previewCamera);
-    renderer.setRenderTarget(null);
-
-    // Read pixels from render target
-    const pixelBuffer = new Uint8Array(256 * 256 * 4);
-    renderer.readRenderTargetPixels(previewRenderTarget, 0, 0, 256, 256, pixelBuffer);
-
-    // Copy to canvas
-    const imageData = ctx.createImageData(256, 256);
-    for (let i = 0; i < pixelBuffer.length; i++) {
-      imageData.data[i] = pixelBuffer[i];
-    }
-    ctx.putImageData(imageData, 0, 0);
-
-    // Clean up preview resources
-    previewScene.remove(previewPlane);
-    previewGeometry.dispose();
-    previewMaterial.dispose();
+    const preview = generateNoisePreview(noiseType, 256);
+    option.appendChild(preview);
 
     const label = document.createElement('div');
     label.className = 'noise-label';
-    label.textContent = noiseType.charAt(0).toUpperCase() + noiseType.slice(1);
+    label.textContent = noiseNames[index];
 
-    option.appendChild(canvas);
     option.appendChild(label);
 
     option.addEventListener('click', () => {
@@ -900,9 +976,6 @@ function generateNoisePalette() {
 
     noiseGrid.appendChild(option);
   });
-
-  // Clean up preview render target
-  previewRenderTarget.dispose();
 }
 
 /**
