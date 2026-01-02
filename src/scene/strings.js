@@ -180,10 +180,16 @@ export function clearTubeStrings() {
  */
 export function createStrings(positions) {
   const meshes = [];
-  positions.forEach((pos, i) => {
-    const segment = createTubeString(pos, new THREE.Vector3(0, 0, 0), i, null);
+  const numPositions = positions.length;
+
+  for (let i = 0; i < numPositions; i++) {
+    const nextIndex = (i + 1) % numPositions;
+    const start = positions[i];
+    const end = positions[nextIndex];
+    const segment = createTubeString(start, end, i, null);
     meshes.push(segment.mesh);
-  });
+  }
+
   return meshes;
 }
 

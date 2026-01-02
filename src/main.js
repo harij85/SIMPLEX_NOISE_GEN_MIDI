@@ -67,6 +67,7 @@ import {
   startSequencer,
   stopSequencer,
   isSequencerRunning,
+  updateCurrentStep,
   setSampleNoiseCallback,
   setSendNoteOnCallback,
   setSendNoteOffCallback
@@ -93,7 +94,8 @@ import {
 import {
   createStrings,
   updateStringGeometry,
-  updateStringVisuals
+  updateStringVisuals,
+  getTubeSegments
 } from './scene/strings.js';
 
 // Shaders
@@ -800,8 +802,10 @@ function updateSensorDistribution() {
     samplingPoints[i].lerp(targetSamplePoints[i], POSITION_SMOOTHING);
   }
 
-  // Update beacon positions
+  // Update beacon and string positions
   for (let i = 0; i < numSteps; i++) {
+    const nextIndex = (i + 1) % numSteps;
+
     if (beaconMeshes[i]) {
       const basePos = samplingPoints[i].clone();
       const direction = basePos.clone().normalize();
@@ -809,14 +813,55 @@ function updateSensorDistribution() {
       beaconMeshes[i].position.copy(beaconPos);
     }
 
-    // Update string geometry
-    if (i < numSteps - 1 && stringMeshes[i]) {
-      updateStringGeometry(stringMeshes[i], samplingPoints[i], new THREE.Vector3());
+    // Update string geometry to connect to next beacon
+    if (stringMeshes[i]) {
+      const basePos1 = samplingPoints[i].clone();
+      const dir1 = basePos1.clone().normalize();
+      const beaconPos1 = basePos1.clone().add(dir1.multiplyScalar(0.1));
+
+      const basePos2 = samplingPoints[nextIndex].clone();
+      const dir2 = basePos2.clone().normalize();
+      const beaconPos2 = basePos2.clone().add(dir2.multiplyScalar(0.1));
+
+      // Find the segment index and update it properly
+      const tubeSegments = getTubeSegments();
+      const segment = tubeSegments[i];
+      if (segment) {
+        segment.mesh.geometry.dispose();
+        const midpoint = new THREE.Vector3().addVectors(beaconPos1, beaconPos2).multiplyScalar(0.5);
+        const midpointDir = midpoint.clone().normalize();
+        const controlPoint = midpoint.clone().add(midpointDir.multiplyScalar(0.15));
+        const curve = new THREE.QuadraticBezierCurve3(beaconPos1, controlPoint, beaconPos2);
+        segment.mesh.geometry = new THREE.TubeGeometry(curve, 16, 0.01, 8, false);
+      }
     }
   }
 
   // Update sampling geometry world positions
   updateSamplingWorldPositions(samplingGeometry, samplingPoints, getNoiseRotationGroup().quaternion);
+}
+
+/**
+ * Update sequence glow animation for beacons and strings
+ */
+function updateSequenceGlow() {
+  if (!isSequencerRunning()) {
+    return;
+  }
+
+  const currentStepIndex = updateCurrentStep();
+
+  // Highlight current step beacon
+  if (beaconMeshes[currentStepIndex]) {
+    highlightBeacon(beaconMeshes[currentStepIndex]);
+
+    // Also pluck the string if it's active
+    const param = getStepParameter(currentStepIndex);
+    if (param && param.active && stringPhysicsArray[currentStepIndex]) {
+      const velocity = param.velocity !== null ? param.velocity / 127 : 0.6;
+      pluckString(stringPhysicsArray[currentStepIndex], velocity);
+    }
+  }
 }
 
 /**
@@ -1055,6 +1100,9 @@ function animate() {
 
   // Update sensor positions with distribution morphing
   updateSensorDistribution();
+
+  // Update sequence glow (beacon highlighting)
+  updateSequenceGlow();
 
   // Update beacon animations
   updateBeaconAnimations(beaconMeshes);
