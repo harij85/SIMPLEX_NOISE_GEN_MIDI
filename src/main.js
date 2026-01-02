@@ -87,7 +87,6 @@ import {
 import { addAmbientLight } from './scene/lighting.js';
 import {
   createSensors,
-  updateSensorPositions,
   highlightBeacon,
   updateBeaconAnimations
 } from './scene/sensors.js';
@@ -114,7 +113,7 @@ import {
   setScaleIntervals,
   loadScalaFile
 } from './utils/scales.js';
-import { createFibonacciSphere } from './utils/geometry.js';
+import { createFibonacciSphere, generateLinePositions } from './utils/geometry.js';
 
 // Application state
 let noiseSphere = null;
@@ -122,6 +121,12 @@ let noiseMaterial = null;
 let stringMeshes = [];
 let stringPhysicsArray = [];
 let beaconMeshes = [];
+
+// Sensor position arrays for distribution morphing
+let linePositions = [];
+let randomPositions = [];
+let targetSamplePoints = [];
+const POSITION_SMOOTHING = 0.15;
 
 // Sampling system
 let samplingScene = null;
@@ -171,6 +176,12 @@ async function init() {
 
   // Create sensors (beacons)
   const sensorPositions = createFibonacciSphere(numSteps);
+
+  // Initialize position arrays for morphing
+  linePositions = generateLinePositions(numSteps);
+  randomPositions = sensorPositions.map(pos => pos.clone());
+  targetSamplePoints = sensorPositions.map(pos => pos.clone());
+
   beaconMeshes = createSensors(sensorPositions);
   beaconMeshes.forEach(beacon => getNoiseRotationGroup().add(beacon));
 
@@ -761,6 +772,54 @@ function handleStepsChange(newSteps) {
 }
 
 /**
+ * Update sensor distribution with morphing and animation
+ */
+function updateSensorDistribution() {
+  const distribution = getSensorDistribution();
+  const animationSpeed = getSensorAnimationSpeed();
+  const time = getTime();
+  const numSteps = getNumSteps();
+
+  // Calculate animated mix values if animation is enabled
+  let animatedMix = null;
+  if (animationSpeed > 0) {
+    animatedMix = [];
+    for (let i = 0; i < numSteps; i++) {
+      const phase = (i / numSteps) * Math.PI * 2;
+      const cosineValue = (Math.cos(time * animationSpeed + phase) + 1.0) / 2.0;
+      const blendedValue = distribution * 0.5 + cosineValue * 0.5;
+      animatedMix.push(blendedValue);
+    }
+  }
+
+  // Update target positions
+  for (let i = 0; i < numSteps; i++) {
+    const currentMix = animatedMix !== null ? animatedMix[i] : distribution;
+    targetSamplePoints[i].lerpVectors(linePositions[i], randomPositions[i], currentMix);
+    targetSamplePoints[i].normalize();
+    samplingPoints[i].lerp(targetSamplePoints[i], POSITION_SMOOTHING);
+  }
+
+  // Update beacon positions
+  for (let i = 0; i < numSteps; i++) {
+    if (beaconMeshes[i]) {
+      const basePos = samplingPoints[i].clone();
+      const direction = basePos.clone().normalize();
+      const beaconPos = basePos.clone().add(direction.multiplyScalar(0.1)); // BEACON_HEIGHT
+      beaconMeshes[i].position.copy(beaconPos);
+    }
+
+    // Update string geometry
+    if (i < numSteps - 1 && stringMeshes[i]) {
+      updateStringGeometry(stringMeshes[i], samplingPoints[i], new THREE.Vector3());
+    }
+  }
+
+  // Update sampling geometry world positions
+  updateSamplingWorldPositions(samplingGeometry, samplingPoints, getNoiseRotationGroup().quaternion);
+}
+
+/**
  * Update step grid UI
  */
 function updateStepGridUI() {
@@ -994,14 +1053,8 @@ function animate() {
   updateClayPhysics();
   noiseMaterial.uniforms.uDeformations.value = getDeformationsForShader();
 
-  // Update sensor positions
-  updateSensorPositions(
-    beaconMeshes,
-    samplingPoints,
-    getSensorDistribution(),
-    getSensorAnimationSpeed(),
-    getTime()
-  );
+  // Update sensor positions with distribution morphing
+  updateSensorDistribution();
 
   // Update beacon animations
   updateBeaconAnimations(beaconMeshes);
