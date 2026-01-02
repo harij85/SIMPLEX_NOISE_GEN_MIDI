@@ -74,6 +74,7 @@ import {
 // Scene
 import {
   initScene,
+  getScene,
   getRenderer,
   getCamera,
   updateControls,

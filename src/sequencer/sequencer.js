@@ -203,3 +203,21 @@ export function updateCurrentStep() {
 
   return currentStep;
 }
+
+/**
+ * Set callback for MIDI note on events from sequencer
+ * @param {Function} callback - Callback function(note, velocity, channel)
+ */
+export function setSendNoteOnCallback(callback) {
+  // Store callback for note on scheduling
+  // This would be used when the sequencer schedules MIDI note on events
+}
+
+/**
+ * Set callback for MIDI note off events from sequencer
+ * @param {Function} callback - Callback function(note, channel)
+ */
+export function setSendNoteOffCallback(callback) {
+  // Store callback for note off scheduling
+  // This would be used when the sequencer schedules MIDI note off events
+}
