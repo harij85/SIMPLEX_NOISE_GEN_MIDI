@@ -129,3 +129,19 @@ export function ticksToMS(ticks, bpm = BPM) {
   const quarterNotes = ticks / MIDI_CONFIG.PPQN;
   return quarterNotes * quarterNoteMS;
 }
+
+/**
+ * Get time signature numerator
+ * @returns {number} Numerator
+ */
+export function getTimeSigNumerator() {
+  return timeSigNumerator;
+}
+
+/**
+ * Get time signature denominator
+ * @returns {number} Denominator
+ */
+export function getTimeSigDenominator() {
+  return timeSigDenominator;
+}
