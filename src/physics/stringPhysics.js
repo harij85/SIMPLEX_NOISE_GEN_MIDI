@@ -43,14 +43,31 @@ export function getStringPhysics(stringIndex) {
 
 /**
  * Pluck a string to start vibration
- * @param {number} stringIndex - Index of the string to pluck
- * @param {number} velocity - MIDI velocity (0-127) controls pluck strength
- * @param {THREE.Vector3} start - String start position
- * @param {THREE.Vector3} end - String end position
- * @param {number} totalStrings - Total number of strings
+ * @param {number|Object} stringIndexOrPhysics - Index of string or physics object
+ * @param {number} velocity - MIDI velocity (0-127) or normalized (0-1) controls pluck strength
+ * @param {THREE.Vector3} start - String start position (optional)
+ * @param {THREE.Vector3} end - String end position (optional)
+ * @param {number} totalStrings - Total number of strings (optional)
  */
-export function pluckString(stringIndex, velocity, start, end, totalStrings) {
-  const physics = getStringPhysics(stringIndex);
+export function pluckString(stringIndexOrPhysics, velocity, start, end, totalStrings) {
+  let physics;
+
+  // Check if first argument is a physics object or an index
+  if (typeof stringIndexOrPhysics === 'object' && stringIndexOrPhysics.displacement) {
+    // Called with physics object directly (from main.js)
+    physics = stringIndexOrPhysics;
+
+    // Simplified pluck without string geometry
+    const pluckStrength = velocity * 0.15; // velocity is already 0-1
+    physics.displacement.set(0, pluckStrength, 0);
+    physics.velocity.set(0, -pluckStrength * 0.3, 0);
+    physics.isVibrating = true;
+    return;
+  }
+
+  // Original implementation with index
+  const stringIndex = stringIndexOrPhysics;
+  physics = getStringPhysics(stringIndex);
 
   // Get string orientation to determine pluck direction
   const midpoint = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
@@ -84,7 +101,7 @@ export function pluckString(stringIndex, velocity, start, end, totalStrings) {
     physics.originalCurve = new THREE.QuadraticBezierCurve3(start, originalControlPoint, end);
   }
 
-  console.log(`🎸 String ${stringIndex} plucked with velocity ${velocity}`);
+  console.log(`String ${stringIndex} plucked with velocity ${velocity}`);
 }
 
 /**
@@ -172,13 +189,25 @@ export function stopStringVibration(stringIndex) {
 
 /**
  * Apply external displacement to a string (e.g., from pitch bend)
- * @param {number} stringIndex - String index
- * @param {THREE.Vector3} displacement - Displacement vector to add
+ * @param {number|Object} stringIndexOrPhysics - String index or physics object
+ * @param {THREE.Vector3} displacement - Displacement vector to add (optional if physics passed)
  * @param {number} maxDisplacement - Maximum allowed displacement magnitude
+ * @returns {THREE.Vector3} Current displacement vector
  */
-export function applyStringDisplacement(stringIndex, displacement, maxDisplacement = 0.2) {
-  const physics = stringPhysics[stringIndex];
-  if (!physics || !physics.isVibrating) return;
+export function applyStringDisplacement(stringIndexOrPhysics, displacement, maxDisplacement = 0.2) {
+  let physics;
+
+  // Check if called with physics object directly
+  if (typeof stringIndexOrPhysics === 'object' && stringIndexOrPhysics.displacement) {
+    physics = stringIndexOrPhysics;
+    // Return current displacement for main.js usage
+    return physics.displacement.clone();
+  }
+
+  // Original implementation with index
+  const stringIndex = stringIndexOrPhysics;
+  physics = stringPhysics[stringIndex];
+  if (!physics || !physics.isVibrating) return new THREE.Vector3();
 
   physics.displacement.add(displacement);
 
@@ -187,6 +216,17 @@ export function applyStringDisplacement(stringIndex, displacement, maxDisplaceme
   if (currentMagnitude > maxDisplacement) {
     physics.displacement.normalize().multiplyScalar(maxDisplacement);
   }
+
+  return physics.displacement.clone();
+}
+
+/**
+ * Create string physics object (alias for initStringPhysics)
+ * @returns {Object} Physics object
+ */
+export function createStringPhysics() {
+  const index = stringPhysics.length;
+  return initStringPhysics(index);
 }
 
 export { stringPhysics };
