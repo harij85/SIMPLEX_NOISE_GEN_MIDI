@@ -825,11 +825,17 @@ function openStepEditor(stepIndex) {
 }
 
 /**
- * Generate noise shader palette
+ * Generate noise shader palette with WebGL-rendered previews
  */
 function generateNoisePalette() {
   const noiseGrid = document.getElementById('noiseGrid');
   const noiseTypes = ['simplex', 'perlin', 'fbm', 'voronoi', 'ridged', 'cellular'];
+  const renderer = getRenderer();
+
+  // Create preview scene and camera
+  const previewScene = new THREE.Scene();
+  const previewCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  const previewRenderTarget = new THREE.WebGLRenderTarget(256, 256);
 
   noiseTypes.forEach(noiseType => {
     const option = document.createElement('div');
@@ -839,23 +845,37 @@ function generateNoisePalette() {
     }
 
     const canvas = document.createElement('canvas');
-    canvas.width = 128;
-    canvas.height = 128;
+    canvas.width = 256;
+    canvas.height = 256;
     const ctx = canvas.getContext('2d');
 
-    // Generate noise preview (simple gradient for now)
-    const imageData = ctx.createImageData(128, 128);
-    for (let y = 0; y < 128; y++) {
-      for (let x = 0; x < 128; x++) {
-        const idx = (y * 128 + x) * 4;
-        const value = Math.random() * 255;
-        imageData.data[idx] = value;
-        imageData.data[idx + 1] = value;
-        imageData.data[idx + 2] = value;
-        imageData.data[idx + 3] = 255;
-      }
+    // Create a plane with noise material for preview
+    const previewMaterial = createNoiseMaterial(noiseType);
+    previewMaterial.uniforms.uTime.value = 0;
+    const previewGeometry = new THREE.PlaneGeometry(2, 2);
+    const previewPlane = new THREE.Mesh(previewGeometry, previewMaterial);
+    previewScene.add(previewPlane);
+
+    // Render noise to render target
+    renderer.setRenderTarget(previewRenderTarget);
+    renderer.render(previewScene, previewCamera);
+    renderer.setRenderTarget(null);
+
+    // Read pixels from render target
+    const pixelBuffer = new Uint8Array(256 * 256 * 4);
+    renderer.readRenderTargetPixels(previewRenderTarget, 0, 0, 256, 256, pixelBuffer);
+
+    // Copy to canvas
+    const imageData = ctx.createImageData(256, 256);
+    for (let i = 0; i < pixelBuffer.length; i++) {
+      imageData.data[i] = pixelBuffer[i];
     }
     ctx.putImageData(imageData, 0, 0);
+
+    // Clean up preview resources
+    previewScene.remove(previewPlane);
+    previewGeometry.dispose();
+    previewMaterial.dispose();
 
     const label = document.createElement('div');
     label.className = 'noise-label';
@@ -880,6 +900,9 @@ function generateNoisePalette() {
 
     noiseGrid.appendChild(option);
   });
+
+  // Clean up preview render target
+  previewRenderTarget.dispose();
 }
 
 /**
