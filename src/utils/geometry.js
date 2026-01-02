@@ -136,3 +136,14 @@ export function rotateVectorAroundAxis(vector, axis, angle) {
   result.applyAxisAngle(axis.normalize(), angle);
   return result;
 }
+
+/**
+ * Alias for generateFibonacciSpherePositions
+ * Create Fibonacci sphere distribution
+ * @param {number} count - Number of points
+ * @param {number} radius - Sphere radius
+ * @returns {Array<THREE.Vector3>} Array of position vectors
+ */
+export function createFibonacciSphere(count, radius = 1.0) {
+  return generateFibonacciSpherePositions(count, radius);
+}
