@@ -132,3 +132,11 @@ export function setExpression(value) {
 export function getExpression() {
   return midiInputState.expression;
 }
+
+/**
+ * Get active notes (alias for getAllActiveNotes)
+ * @returns {Map} Active notes map
+ */
+export function getActiveNotes() {
+  return getAllActiveNotes();
+}
