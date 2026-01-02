@@ -12,6 +12,7 @@ import {
   getNumSteps, setNumSteps,
   getCurrentStep,
   updateTime,
+  getTime,
   setMousePosition,
   getActiveString, setActiveString,
   setEditingStep, getEditingStep,
