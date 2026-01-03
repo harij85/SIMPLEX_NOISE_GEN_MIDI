@@ -120,8 +120,22 @@ export function quadraticBezierPoint(p0, p1, p2, t) {
  */
 export function createCurvedControlPoint(start, end, curvature = 0.15) {
   const midpoint = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
-  const midpointDir = midpoint.clone().normalize();
-  return midpoint.clone().add(midpointDir.multiplyScalar(curvature));
+
+  // Calculate direction - if midpoint is at origin (opposite points), use perpendicular
+  let direction;
+  if (midpoint.lengthSq() < 0.0001) {
+    // Points are opposite on sphere, use perpendicular direction
+    direction = new THREE.Vector3().crossVectors(start, new THREE.Vector3(0, 1, 0));
+    if (direction.lengthSq() < 0.0001) {
+      // start is aligned with Y axis, use X axis instead
+      direction.crossVectors(start, new THREE.Vector3(1, 0, 0));
+    }
+    direction.normalize();
+  } else {
+    direction = midpoint.clone().normalize();
+  }
+
+  return midpoint.clone().add(direction.multiplyScalar(curvature));
 }
 
 /**

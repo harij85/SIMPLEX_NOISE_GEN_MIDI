@@ -20,16 +20,19 @@ import {
   setSensorAnimationSpeed, getSensorAnimationSpeed,
   setCurrentNoiseType, getCurrentNoiseType
 } from './config/globalState.js';
+import { MIDI_CONFIG } from './config/constants.js';
 
 // MIDI System
-import { initMIDI, sendMIDIMessage } from './midi/midiIO.js';
+import { initMIDI, sendMIDIMessage, attachMIDIInputHandler } from './midi/midiIO.js';
 import { setMIDIInputEnabled } from './midi/midiState.js';
 import {
   setNoteOnCallback,
   setNoteOffCallback,
   setPitchBendCallback,
   setControlChangeCallback,
-  setMapNoteToSensorCallback
+  setMapNoteToSensorCallback,
+  setLogActivityCallback,
+  handleMIDIMessage
 } from './midi/midiHandlers.js';
 
 // Physics
@@ -52,7 +55,7 @@ import {
 } from './physics/clayPhysics.js';
 
 // Sequencer
-import { setBPM, setTimeSig } from './sequencer/scheduler.js';
+import { setBPM, setTimeSig, getStepMS } from './sequencer/scheduler.js';
 import {
   initStepParameters,
   getStepParameters,
@@ -116,6 +119,7 @@ import {
   loadScalaFile
 } from './utils/scales.js';
 import { createFibonacciSphere, generateLinePositions } from './utils/geometry.js';
+import { logMIDIActivity } from './utils/logger.js';
 
 // Application state
 let noiseSphere = null;
@@ -145,11 +149,21 @@ let isMouseDown = false;
 // Animation
 let animationId = null;
 
+// GPU Sampling Visualization
+let samplingCanvas = null;
+let samplingContext = null;
+let lastNoiseValues = []; // Store last sampled noise values for GPU colors
+let samplingPixelBuffer = null;
+
+// MIDI Monitor state
+let lastNoteOnTime = 0;
+let lastNoteData = { note: 0, velocity: 0, duration: 0 };
+
 /**
  * Initialize the entire application
  */
 async function init() {
-  console.log('Initializing 3D Noise MIDI Instrument...');
+  console.log('Initializing...');
 
   // Initialize Three.js scene
   initScene();
@@ -164,6 +178,11 @@ async function init() {
   const midiReady = await initMIDI();
   if (!midiReady) {
     console.warn('MIDI initialization failed');
+  }
+  else {
+    console.log('MIDI initialized successfully');
+    // Attach MIDI input handler
+    attachMIDIInputHandler(handleMIDIMessage);
   }
 
   // Initialize raycaster for mouse interactions
@@ -218,6 +237,9 @@ async function init() {
   // Update step grid UI
   updateStepGridUI();
 
+  // Initialize GPU sampling visualization
+  initSamplingVisualization();
+
   // Start animation loop
   animate();
 
@@ -239,6 +261,8 @@ function setupSamplingSystem(renderer, sensorPositions) {
   samplingGeometry = createSamplingGeometry(sensorPositions);
   samplingPoints = sensorPositions;
 
+ 
+
   const samplingMesh = new THREE.Points(samplingGeometry, samplingMaterial);
   samplingScene.add(samplingMesh);
 
@@ -250,6 +274,11 @@ function setupSamplingSystem(renderer, sensorPositions) {
  * Wire up all module callbacks
  */
 function setupCallbacks() {
+  // MIDI Input activity logging
+  setLogActivityCallback((message) => {
+    logMIDIActivity(message);
+  });
+
   // MIDI Input callbacks
   setNoteOnCallback((note, velocity, sensorIndex) => {
     if (sensorIndex >= 0 && sensorIndex < stringPhysicsArray.length) {
@@ -274,6 +303,9 @@ function setupCallbacks() {
   });
 
   setControlChangeCallback((controller, value) => {
+    // Update MIDI monitor
+    updateMIDICC(controller, value);
+
     // CC1 (Mod Wheel) controls spatial scale
     if (controller === 1) {
       const scale = 0.1 + (value / 127) * 1.9;
@@ -300,16 +332,51 @@ function setupCallbacks() {
     // Sample noise from GPU
     const renderer = getRenderer();
     const numSteps = getNumSteps();
-    return sampleNoiseFromGPU(renderer, samplingScene, samplingCamera, samplingTarget, numSteps);
+    const noiseValues = sampleNoiseFromGPU(renderer, samplingScene, samplingCamera, samplingTarget, numSteps);
+
+    // Store for GPU color display in tracker
+    lastNoiseValues = noiseValues;
+
+    return noiseValues;
   });
 
-  setSendNoteOnCallback((note, velocity, time) => {
+ 
+
+  setSendNoteOnCallback((note, velocity, time, stepIndex) => {
+    console.log('[Note Callback] Note ON:', { note, velocity, time, stepIndex });
     sendMIDIMessage([0x90, note, velocity]);
-    logActivity(`Seq Note On: ${note} (vel: ${velocity})`);
+    logMIDIActivity(`Seq Note On: ${note} (vel: ${velocity})`);
+
+    // Clock sync: Clear tracker when step 1 (index 0) plays
+    if (stepIndex === 0) {
+      clearMIDITracker();
+      console.log('[Clock Sync] Step 1 - Tracker cleared');
+    }
+
+    // Get GPU color for this step
+    const noiseValue = lastNoiseValues[stepIndex] || 0;
+    const gpuColor = getColorFromNoiseMaterial(noiseValue);
+
+    // Track note on time and data
+    lastNoteOnTime = time;
+    lastNoteData = { note, velocity, duration: 0, stepIndex, gpuColor };
+
+    // Update MIDI monitor immediately with estimated duration
+    const estimatedDuration = getStepMS() * 0.95; // Use step duration as estimate
+    console.log('[Note Callback] Calling updateMIDIMonitor with estimatedDuration:', estimatedDuration);
+    updateMIDIMonitor(note, velocity, estimatedDuration, stepIndex, gpuColor);
   });
 
-  setSendNoteOffCallback((note, time) => {
+  setSendNoteOffCallback((note, time, stepIndex) => {
     sendMIDIMessage([0x80, note, 0]);
+
+    // Track actual duration (but don't update monitor - already done on note ON)
+    if (lastNoteData.note === note && lastNoteData.stepIndex === stepIndex) {
+      const duration = time - lastNoteOnTime;
+      lastNoteData.duration = duration;
+      // Note: Tracker is updated on note ON with estimated duration
+      // to avoid duplicates. Actual duration could be used for future enhancements.
+    }
   });
 }
 
@@ -322,10 +389,10 @@ function setupUI() {
   startBtn.addEventListener('click', () => {
     if (isSequencerRunning()) {
       stopSequencer();
-      startBtn.textContent = '▶ Start MIDI Sequencer';
+      startBtn.textContent = 'Start';
     } else {
       startSequencer();
-      startBtn.textContent = '⏸ Stop MIDI Sequencer';
+      startBtn.textContent = 'Stop';
     }
   });
 
@@ -744,6 +811,11 @@ function handleStepsChange(newSteps) {
   const sensorPositions = createFibonacciSphere(newSteps);
   samplingPoints = sensorPositions;
 
+  // Recreate position arrays for morphing (IMPORTANT: must match new step count)
+  linePositions = generateLinePositions(newSteps);
+  randomPositions = sensorPositions.map(pos => pos.clone());
+  targetSamplePoints = sensorPositions.map(pos => pos.clone());
+
   // Create new beacons and strings
   beaconMeshes = createSensors(sensorPositions);
   beaconMeshes.forEach(beacon => getNoiseRotationGroup().add(beacon));
@@ -797,7 +869,7 @@ function updateSensorDistribution() {
   // Update target positions
   for (let i = 0; i < numSteps; i++) {
     const currentMix = animatedMix !== null ? animatedMix[i] : distribution;
-    targetSamplePoints[i].lerpVectors(linePositions[i], randomPositions[i], currentMix);
+    targetSamplePoints[i].copy(linePositions[i]).lerp(randomPositions[i], currentMix);
     targetSamplePoints[i].normalize();
     samplingPoints[i].lerp(targetSamplePoints[i], POSITION_SMOOTHING);
   }
@@ -1096,7 +1168,12 @@ function animate() {
 
   // Update clay physics
   updateClayPhysics();
-  noiseMaterial.uniforms.uDeformations.value = getDeformationsForShader();
+  const deformations = getDeformationsForShader();
+  // Pad to 64 for shader uniform array
+  while (deformations.length < 64) {
+    deformations.push(new THREE.Vector3(0, 0, 0));
+  }
+  noiseMaterial.uniforms.uDeformations.value = deformations;
 
   // Update sensor positions with distribution morphing
   updateSensorDistribution();
@@ -1128,6 +1205,283 @@ function animate() {
 
   // Render scene
   render();
+
+  // Update GPU sampling visualization
+  updateSamplingVisualization();
+}
+
+/**
+ * Initialize GPU sampling visualization canvas
+ */
+function initSamplingVisualization() {
+  samplingCanvas = document.getElementById('samplingCanvas');
+  if (!samplingCanvas) return;
+
+  samplingContext = samplingCanvas.getContext('2d');
+  const numSteps = getNumSteps();
+
+  // Create pixel buffer for reading GPU data
+  samplingPixelBuffer = new Uint8Array(numSteps * 4); // RGBA per pixel
+}
+
+/**
+ * Update GPU sampling visualization
+ * Reads pixels from samplingTarget and displays them on 2D canvas
+ */
+function updateSamplingVisualization() {
+  if (!samplingCanvas || !samplingContext || !samplingTarget) return;
+
+  const renderer = getRenderer();
+  const numSteps = getNumSteps();
+  const currentStep = getCurrentStep();
+
+  // Resize pixel buffer if number of steps changed
+  const requiredBufferSize = numSteps * 4; // RGBA per pixel
+  if (!samplingPixelBuffer || samplingPixelBuffer.length !== requiredBufferSize) {
+    samplingPixelBuffer = new Uint8Array(requiredBufferSize);
+  }
+
+  // Read pixels from the sampling render target
+  renderer.readRenderTargetPixels(
+    samplingTarget,
+    0, 0, // x, y offset
+    numSteps, 1, // width, height
+    samplingPixelBuffer
+  );
+
+  // Clear canvas
+  samplingContext.clearRect(0, 0, samplingCanvas.width, samplingCanvas.height);
+
+  // Calculate pixel width for visualization
+  const pixelWidth = samplingCanvas.width / numSteps;
+  const pixelHeight = samplingCanvas.height;
+
+  // Draw each sampled value as a colored rectangle
+  for (let i = 0; i < numSteps; i++) {
+    const r = samplingPixelBuffer[i * 4];
+    const g = samplingPixelBuffer[i * 4 + 1];
+    const b = samplingPixelBuffer[i * 4 + 2];
+    const value = r / 255; // Grayscale value (0-1)
+
+    // Get color from noise material uniforms (matches sphere exactly)
+    const color = getColorFromNoiseMaterial(value);
+
+    // Highlight current step
+    const isCurrentStep = i === currentStep;
+
+    samplingContext.fillStyle = color;
+    samplingContext.fillRect(i * pixelWidth, 0, pixelWidth, pixelHeight);
+
+    // Draw current step indicator
+    if (isCurrentStep) {
+      samplingContext.strokeStyle = '#ffffff';
+      samplingContext.lineWidth = 2;
+      samplingContext.strokeRect(i * pixelWidth, 0, pixelWidth, pixelHeight);
+    }
+  }
+
+  // Update info text
+  const infoDiv = document.getElementById('samplingInfo');
+  if (infoDiv && currentStep >= 0 && currentStep < numSteps) {
+    const value = samplingPixelBuffer[currentStep * 4] / 255;
+    infoDiv.textContent = `Step: ${currentStep + 1}/${numSteps} | Value: ${value.toFixed(3)}`;
+  }
+}
+
+/**
+ * Get color from noise material uniforms (matches sphere gradient exactly)
+ * Replicates the GLSL gradient logic from noiseMaterial.js
+ */
+function getColorFromNoiseMaterial(value) {
+  if (!noiseMaterial) return 'rgb(128, 128, 128)';
+
+  // Get color uniforms from the noise material
+  const color1 = noiseMaterial.uniforms.uColor1.value;
+  const color2 = noiseMaterial.uniforms.uColor2.value;
+  const color3 = noiseMaterial.uniforms.uColor3.value;
+  const color4 = noiseMaterial.uniforms.uColor4.value;
+  const color5 = noiseMaterial.uniforms.uColor5.value;
+
+  // Replicate GLSL mix logic from fragment shader
+  let r, g, b;
+
+  if (value < 0.2) {
+    const t = value * 5.0;
+    r = Math.round(color1.x * 255 + (color2.x - color1.x) * 255 * t);
+    g = Math.round(color1.y * 255 + (color2.y - color1.y) * 255 * t);
+    b = Math.round(color1.z * 255 + (color2.z - color1.z) * 255 * t);
+  } else if (value < 0.4) {
+    const t = (value - 0.2) * 5.0;
+    r = Math.round(color2.x * 255 + (color3.x - color2.x) * 255 * t);
+    g = Math.round(color2.y * 255 + (color3.y - color2.y) * 255 * t);
+    b = Math.round(color2.z * 255 + (color3.z - color2.z) * 255 * t);
+  } else if (value < 0.6) {
+    const t = (value - 0.4) * 5.0;
+    r = Math.round(color3.x * 255 + (color4.x - color3.x) * 255 * t);
+    g = Math.round(color3.y * 255 + (color4.y - color3.y) * 255 * t);
+    b = Math.round(color3.z * 255 + (color4.z - color3.z) * 255 * t);
+  } else if (value < 0.8) {
+    const t = (value - 0.6) * 5.0;
+    r = Math.round(color4.x * 255 + (color5.x - color4.x) * 255 * t);
+    g = Math.round(color4.y * 255 + (color5.y - color4.y) * 255 * t);
+    b = Math.round(color4.z * 255 + (color5.z - color4.z) * 255 * t);
+  } else {
+    r = Math.round(color5.x * 255);
+    g = Math.round(color5.y * 255);
+    b = Math.round(color5.z * 255);
+  }
+
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
+// Tracker state
+const trackerRows = [];
+
+/**
+ * Update MIDI tracker display with new note data
+ * @param {number} note - MIDI note number
+ * @param {number} velocity - MIDI velocity (1-127)
+ * @param {number} duration - Note duration in milliseconds
+ * @param {number} stepIndex - Step index (0-based)
+ * @param {string} gpuColor - RGB color string from GPU sampling
+ */
+function updateMIDIMonitor(note, velocity, duration, stepIndex = null, gpuColor = 'rgb(128, 128, 128)') {
+  console.log('[MIDI Tracker] updateMIDIMonitor called:', { note, velocity, duration, stepIndex, gpuColor });
+
+  const trackerRowsDiv = document.getElementById('trackerRows');
+  if (!trackerRowsDiv) {
+    console.error('[MIDI Tracker] trackerRows div not found!');
+    return;
+  }
+
+  const stepNumber = stepIndex !== null ? stepIndex : getCurrentStep();
+  const noteName = midiNoteToName(note);
+  const durationMs = Math.round(duration);
+
+  console.log('[MIDI Tracker] Creating row:', { stepNumber, noteName, velocity, durationMs, gpuColor });
+
+  // Create new tracker row
+  const row = document.createElement('div');
+  row.style.display = 'grid';
+  row.style.gridTemplateColumns = '35px 30px 50px 35px 50px'; // Added GPU column
+  row.style.gap = '8px';
+  row.style.padding = '2px 0';
+  row.style.borderBottom = '1px solid rgba(255, 255, 255, 0.1)';
+  row.style.backgroundColor = 'rgba(255, 255, 255, 0.05)'; // Highlight newest row
+
+  // Add cells
+  const stepCell = document.createElement('div');
+  stepCell.textContent = String(stepNumber + 1).padStart(2, '0'); // Display as 1-based (01-16)
+  stepCell.style.textAlign = 'center';
+
+  // GPU color swatch
+  const gpuCell = document.createElement('div');
+  gpuCell.style.width = '20px';
+  gpuCell.style.height = '12px';
+  gpuCell.style.backgroundColor = gpuColor;
+  gpuCell.style.border = '1px solid rgba(255, 255, 255, 0.2)';
+  gpuCell.style.borderRadius = '2px';
+  gpuCell.style.margin = '0 auto';
+
+  const noteCell = document.createElement('div');
+  noteCell.textContent = noteName;
+  noteCell.style.textAlign = 'center';
+
+  const velCell = document.createElement('div');
+  velCell.textContent = String(velocity);
+  velCell.style.textAlign = 'center';
+
+  const durCell = document.createElement('div');
+  durCell.textContent = String(durationMs);
+  durCell.style.textAlign = 'right';
+
+  row.appendChild(stepCell);
+  row.appendChild(gpuCell); // GPU color swatch
+  row.appendChild(noteCell);
+  row.appendChild(velCell);
+  row.appendChild(durCell);
+
+  // Insert at top of list
+  if (trackerRowsDiv.firstChild) {
+    trackerRowsDiv.insertBefore(row, trackerRowsDiv.firstChild);
+  } else {
+    trackerRowsDiv.appendChild(row);
+  }
+
+  // Fade out previous row highlight
+  if (trackerRowsDiv.children.length > 1) {
+    trackerRowsDiv.children[1].style.backgroundColor = 'transparent';
+  }
+
+  // Store reference
+  trackerRows.unshift(row);
+
+  // Dynamically limit rows to current number of steps
+  const numSteps = getNumSteps();
+  while (trackerRows.length > numSteps) {
+    const oldRow = trackerRows.pop();
+    if (oldRow && oldRow.parentNode) {
+      oldRow.parentNode.removeChild(oldRow);
+    }
+  }
+
+  // Update tracker height to fit all steps (each row ~18px)
+  const rowHeight = 18;
+  const maxHeight = Math.min(numSteps * rowHeight, 400); // Cap at 400px
+  trackerRowsDiv.style.maxHeight = `${maxHeight}px`;
+
+  // Update steps display
+  const numStepsDisplay = document.getElementById('numStepsDisplay');
+  if (numStepsDisplay) {
+    numStepsDisplay.textContent = numSteps;
+  }
+}
+
+/**
+ * Clear MIDI tracker display
+ * Called on clock sync (when step 1 plays) to start fresh each loop
+ * Prepares for OSC/UDP clock sync from Max/Ableton in future
+ */
+function clearMIDITracker() {
+  const trackerRowsDiv = document.getElementById('trackerRows');
+  if (!trackerRowsDiv) {
+    console.warn('[Clock Sync] trackerRows div not found');
+    return;
+  }
+
+  // Clear all tracker rows
+  while (trackerRowsDiv.firstChild) {
+    trackerRowsDiv.removeChild(trackerRowsDiv.firstChild);
+  }
+
+  // Clear tracker rows array
+  trackerRows.length = 0;
+
+  console.log('[Clock Sync] Tracker cleared for new loop');
+}
+
+/**
+ * Convert MIDI note number to note name
+ * @param {number} midiNote - MIDI note number (0-127)
+ * @returns {string} Note name (e.g., "C4", "A#3")
+ */
+function midiNoteToName(midiNote) {
+  const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  const octave = Math.floor(midiNote / 12) - 1;
+  const noteName = noteNames[midiNote % 12];
+  return `${noteName}${octave}`;
+}
+
+/**
+ * Update CC value in MIDI monitor
+ * @param {number} controller - CC number
+ * @param {number} value - CC value (0-127)
+ */
+function updateMIDICC(controller, value) {
+  const ccValueEl = document.getElementById('midiCCValue');
+  if (ccValueEl) {
+    ccValueEl.textContent = `CC${controller}: ${value}`;
+  }
 }
 
 // Initialize when DOM is ready

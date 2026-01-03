@@ -23,6 +23,7 @@ export function initStringPhysics(index) {
     displacement: new THREE.Vector3(0, 0, 0), // Current displacement from rest
     velocity: new THREE.Vector3(0, 0, 0),      // Current velocity
     isVibrating: false,
+    pitchBend: 0, // MIDI pitch bend value (-8192 to 8191, 0 = no bend)
     dampening: PHYSICS_CONSTANTS.STRING_DAMPENING,  // Energy loss per frame (0-1)
     stiffness: PHYSICS_CONSTANTS.STRING_STIFFNESS,   // Spring force (how quickly it returns to center)
     originalCurve: null // Store original curve for restoration
@@ -58,7 +59,8 @@ export function pluckString(stringIndexOrPhysics, velocity, start, end, totalStr
     physics = stringIndexOrPhysics;
 
     // Simplified pluck without string geometry
-    const pluckStrength = velocity * 0.15; // velocity is already 0-1
+    const normalizedVelocity = velocity !== undefined ? velocity : 0.5; // Default to 0.5 if not provided
+    const pluckStrength = normalizedVelocity * 0.15; // velocity is already 0-1
     physics.displacement.set(0, pluckStrength, 0);
     physics.velocity.set(0, -pluckStrength * 0.3, 0);
     physics.isVibrating = true;

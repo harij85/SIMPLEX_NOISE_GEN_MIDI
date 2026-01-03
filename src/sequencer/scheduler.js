@@ -5,12 +5,18 @@
  * time signatures, and PPQN-based MIDI timing.
  */
 
-import { MIDI_CONFIG, SEQUENCER_DEFAULTS } from '../config/constants.js';
+import { MIDI_CONFIG } from '../config/constants.js';
+import {
+  getNumSteps,
+  getBPM as getStateBPM,
+  setBPM as setStateBPM,
+  getTimeSigNumerator as getStateTimeSigNumerator,
+  getTimeSigDenominator as getStateTimeSigDenominator,
+  setTimeSig as setStateTimeSig,
+  setNumSteps as setGlobalNumSteps
+} from '../config/globalState.js';
 
-// Timing state
-let BPM = SEQUENCER_DEFAULTS.BPM;
-let timeSigNumerator = SEQUENCER_DEFAULTS.TIME_SIG_NUM;
-let timeSigDenominator = SEQUENCER_DEFAULTS.TIME_SIG_DEN;
+// Cached step duration
 let STEP_MS = 0;
 
 /**
@@ -21,7 +27,7 @@ let STEP_MS = 0;
  * @param {number} numSteps - Number of steps per measure
  * @returns {number} Step duration in milliseconds
  */
-export function calculateStepMS(bpm = BPM, numerator = timeSigNumerator, denominator = timeSigDenominator, numSteps = SEQUENCER_DEFAULTS.STEPS) {
+export function calculateStepMS(bpm, numerator, denominator, numSteps) {
   if (bpm <= 0) return Infinity;
 
   // Calculate quarter note duration in ms
@@ -45,7 +51,7 @@ export function calculateStepMS(bpm = BPM, numerator = timeSigNumerator, denomin
  * @param {number} denominator - Time signature denominator
  * @returns {number} Ticks per measure
  */
-export function calculateTicksPerMeasure(numerator = timeSigNumerator, denominator = timeSigDenominator) {
+export function calculateTicksPerMeasure(numerator, denominator) {
   // Ticks per quarter note * quarter notes per measure
   const quarterNotesPerMeasure = numerator * (4 / denominator);
   return MIDI_CONFIG.PPQN * quarterNotesPerMeasure;
@@ -56,7 +62,7 @@ export function calculateTicksPerMeasure(numerator = timeSigNumerator, denominat
  * @returns {number} BPM
  */
 export function getBPM() {
-  return BPM;
+  return getStateBPM();
 }
 
 /**
@@ -64,30 +70,30 @@ export function getBPM() {
  * @param {number} bpm - Beats per minute
  */
 export function setBPM(bpm) {
-  BPM = Math.max(0, Math.min(240, bpm));
-  STEP_MS = calculateStepMS(BPM, timeSigNumerator, timeSigDenominator);
+  setStateBPM(bpm);
+  // Use time signature numerator as default if numSteps hasn't been customized
+  const numSteps = getNumSteps() || getStateTimeSigNumerator();
+  STEP_MS = calculateStepMS(getStateBPM(), getStateTimeSigNumerator(), getStateTimeSigDenominator(), numSteps);
 }
 
 /**
  * Get current time signature
- * @returns {Object} {numerator, denominator}
+ * @returns {Array<number>} [numerator, denominator]
  */
 export function getTimeSig() {
-  return {
-    numerator: timeSigNumerator,
-    denominator: timeSigDenominator
-  };
+  return [getStateTimeSigNumerator(), getStateTimeSigDenominator()];
 }
 
 /**
  * Set time signature and recalculate step timing
- * @param {number} numerator - Beats per measure
+ * @param {number|Array} numerator - Beats per measure, or [numerator, denominator] array
  * @param {number} denominator - Note value (2, 4, 8, 16, etc.)
  */
 export function setTimeSig(numerator, denominator) {
-  timeSigNumerator = Math.max(1, Math.min(256, numerator));
-  timeSigDenominator = Math.max(1, Math.min(256, denominator));
-  STEP_MS = calculateStepMS(BPM, timeSigNumerator, timeSigDenominator);
+  setStateTimeSig(numerator, denominator);
+  // Use time signature numerator as default if numSteps hasn't been customized
+  const numSteps = getNumSteps() || getStateTimeSigNumerator();
+  STEP_MS = calculateStepMS(getStateBPM(), getStateTimeSigNumerator(), getStateTimeSigDenominator(), numSteps);
 }
 
 /**
@@ -95,6 +101,11 @@ export function setTimeSig(numerator, denominator) {
  * @returns {number} Step duration
  */
 export function getStepMS() {
+  // Calculate dynamically if not initialized
+  if (STEP_MS === 0) {
+    const numSteps = getNumSteps() || getStateTimeSigNumerator();
+    return calculateStepMS(getStateBPM(), getStateTimeSigNumerator(), getStateTimeSigDenominator(), numSteps);
+  }
   return STEP_MS;
 }
 
@@ -103,17 +114,18 @@ export function getStepMS() {
  * @param {number} numSteps - Number of steps
  */
 export function updateStepTiming(numSteps) {
-  STEP_MS = calculateStepMS(BPM, timeSigNumerator, timeSigDenominator, numSteps);
+  STEP_MS = calculateStepMS(getStateBPM(), getStateTimeSigNumerator(), getStateTimeSigDenominator(), numSteps);
 }
 
 /**
  * Convert milliseconds to MIDI ticks
  * @param {number} ms - Milliseconds
- * @param {number} bpm - Beats per minute
+ * @param {number} bpm - Beats per minute (optional, uses current BPM if not provided)
  * @returns {number} MIDI ticks
  */
-export function msToTicks(ms, bpm = BPM) {
-  const quarterNoteMS = 60000 / bpm;
+export function msToTicks(ms, bpm) {
+  const actualBpm = bpm !== undefined ? bpm : getStateBPM();
+  const quarterNoteMS = 60000 / actualBpm;
   const quarterNotes = ms / quarterNoteMS;
   return Math.round(quarterNotes * MIDI_CONFIG.PPQN);
 }
@@ -121,11 +133,12 @@ export function msToTicks(ms, bpm = BPM) {
 /**
  * Convert MIDI ticks to milliseconds
  * @param {number} ticks - MIDI ticks
- * @param {number} bpm - Beats per minute
+ * @param {number} bpm - Beats per minute (optional, uses current BPM if not provided)
  * @returns {number} Milliseconds
  */
-export function ticksToMS(ticks, bpm = BPM) {
-  const quarterNoteMS = 60000 / bpm;
+export function ticksToMS(ticks, bpm) {
+  const actualBpm = bpm !== undefined ? bpm : getStateBPM();
+  const quarterNoteMS = 60000 / actualBpm;
   const quarterNotes = ticks / MIDI_CONFIG.PPQN;
   return quarterNotes * quarterNoteMS;
 }
@@ -135,7 +148,7 @@ export function ticksToMS(ticks, bpm = BPM) {
  * @returns {number} Numerator
  */
 export function getTimeSigNumerator() {
-  return timeSigNumerator;
+  return getStateTimeSigNumerator();
 }
 
 /**
@@ -143,5 +156,19 @@ export function getTimeSigNumerator() {
  * @returns {number} Denominator
  */
 export function getTimeSigDenominator() {
-  return timeSigDenominator;
+  return getStateTimeSigDenominator();
+}
+
+/**
+ * Export PPQN constant
+ */
+export const PPQN = MIDI_CONFIG.PPQN;
+
+/**
+ * Set number of steps (forwards to globalState)
+ * @param {number} steps - Number of steps
+ */
+export function setNumSteps(steps) {
+  setGlobalNumSteps(steps);
+  updateStepTiming(steps);
 }

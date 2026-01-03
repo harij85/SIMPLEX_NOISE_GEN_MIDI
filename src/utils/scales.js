@@ -25,10 +25,31 @@ export const SCALES = {
   diminished: [0, 2, 3, 5, 6, 8, 9, 11]
 };
 
+// Alias for backwards compatibility with tests
+export const SCALE_PRESETS = {
+  Chromatic: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+  Major: [0, 2, 4, 5, 7, 9, 11],
+  Minor: [0, 2, 3, 5, 7, 8, 10],
+  Dorian: [0, 2, 3, 5, 7, 9, 10],
+  Phrygian: [0, 1, 3, 5, 7, 8, 10],
+  Lydian: [0, 2, 4, 6, 7, 9, 11],
+  Mixolydian: [0, 2, 4, 5, 7, 9, 10],
+  Aeolian: [0, 2, 3, 5, 7, 8, 10], // Natural minor
+  Locrian: [0, 1, 3, 5, 6, 8, 10],
+  MajorPentatonic: [0, 2, 4, 7, 9],
+  MinorPentatonic: [0, 3, 5, 7, 10],
+  Blues: [0, 3, 5, 6, 7, 10],
+  HarmonicMinor: [0, 2, 3, 5, 7, 8, 11],
+  MelodicMinor: [0, 2, 3, 5, 7, 9, 11],
+  WholeTone: [0, 2, 4, 6, 8, 10],
+  Diminished: [0, 2, 3, 5, 6, 8, 9, 11]
+};
+
 // Scale state
 let scaleEnabled = false;
 let currentScale = SCALES.chromatic;
-let currentKey = 0; // 0 = C, 1 = C#, 2 = D, etc.
+let currentKey = 0; // 0 = C, 1 = C#, 2 = D, etc. (0-11 offset)
+let rootNote = 60; // MIDI note for root (C4 = 60)
 let customScalaScale = null; // For imported Scala files
 
 /**
@@ -155,25 +176,23 @@ export function quantizeToScale(midiNote) {
 }
 
 /**
- * Convert scale degree (1-7 for I-VII) to MIDI note
- * Uses middle octave (C4-B4) as default range
- * @param {number} degree - Scale degree (1-7)
+ * Convert scale degree (0-based index) to MIDI note
+ * Uses rootNote as the base
+ * @param {number} degree - Scale degree (0-based, so 0 = first note, 1 = second, etc.)
  * @returns {number} MIDI note number
  */
 export function scaleDegreeToMidiNote(degree) {
   if (!scaleEnabled) {
-    // If scale is disabled, use chromatic scale in C
-    const middleC = 60; // C4
-    return middleC + (degree - 1);
+    // If scale is disabled, use chromatic scale from root
+    return rootNote + degree;
   }
 
   const scaleIntervals = currentScale;
-  const degreeIndex = (degree - 1) % scaleIntervals.length;
-  const octaveOffset = Math.floor((degree - 1) / scaleIntervals.length);
+  const degreeIndex = degree % scaleIntervals.length;
+  const octaveOffset = Math.floor(degree / scaleIntervals.length);
 
-  // Use C4 (MIDI 60) as base for middle octave
-  const middleC = 60;
-  const note = middleC + currentKey + scaleIntervals[degreeIndex] + (octaveOffset * 12);
+  // Calculate note from root
+  const note = rootNote + scaleIntervals[degreeIndex] + (octaveOffset * 12);
 
   // Clamp to valid MIDI range
   return Math.max(MIDI_CONFIG.MIN_NOTE, Math.min(MIDI_CONFIG.MAX_NOTE, note));
@@ -248,19 +267,42 @@ export function parseScalaFile(text) {
 }
 
 /**
- * Set root note (alias for setCurrentKey)
- * @param {number} note - Root note (0-11)
+ * Set root note using MIDI note number
+ * @param {number} note - Root MIDI note (0-127)
  */
 export function setRootNote(note) {
-  setCurrentKey(note);
+  rootNote = Math.max(0, Math.min(127, note));
+  currentKey = note % 12; // Also update key offset for backwards compatibility
 }
 
 /**
- * Set scale intervals from preset name
- * @param {string} scaleName - Scale name
+ * Get root note as MIDI note number
+ * @returns {number} Root MIDI note (0-127)
  */
-export function setScaleIntervals(scaleName) {
-  setCurrentScale(scaleName);
+export function getRootNote() {
+  return rootNote;
+}
+
+/**
+ * Set scale intervals from preset name or array
+ * @param {string|Array<number>} scale - Scale name or intervals array
+ */
+export function setScaleIntervals(scale) {
+  if (Array.isArray(scale)) {
+    currentScale = scale;
+    customScalaScale = null;
+  } else if (typeof scale === 'string' && SCALES[scale]) {
+    currentScale = SCALES[scale];
+    customScalaScale = null;
+  }
+}
+
+/**
+ * Get current scale intervals
+ * @returns {Array<number>} Scale intervals
+ */
+export function getScaleIntervals() {
+  return currentScale;
 }
 
 /**

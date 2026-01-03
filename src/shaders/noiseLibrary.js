@@ -370,7 +370,9 @@ export const noiseShaderLibrary = {
         frequency *= 2.0;
       }
 
-      return (value - 0.5) * 2.0;
+      // Normalize to [-1, 1] range
+      // Max possible value is ~1.875 (1.0 + 0.5 + 0.25 + 0.125)
+      return (value / 1.875) * 2.0 - 1.0;
     }
   `,
 
@@ -387,8 +389,8 @@ export const noiseShaderLibrary = {
       vec3 i = floor(p);
       vec3 f = fract(p);
 
-      float minDist1 = 1.0;
-      float minDist2 = 1.0;
+      float minDist1 = 10.0;
+      float minDist2 = 10.0;
 
       for (int z = -1; z <= 1; z++) {
         for (int y = -1; y <= 1; y++) {
@@ -408,7 +410,11 @@ export const noiseShaderLibrary = {
         }
       }
 
-      return ((minDist2 - minDist1) - 0.5) * 4.0;
+      // Normalize to [-1, 1] range
+      // F2-F1 (edge distance) typically ranges from 0.0 to ~0.5
+      // Map [0, 0.5] -> [-1, 1]
+      float edgeDist = minDist2 - minDist1;
+      return (edgeDist / 0.5) * 2.0 - 1.0;
     }
   `
 };

@@ -85,20 +85,10 @@ export function updateClayPhysics() {
 
 /**
  * Get deformations array for shader
- * @returns {Array<THREE.Vector3>} Deformation positions (padded to 64)
+ * @returns {Array<THREE.Vector3>} Deformation positions (returns only actual deformations, padding should be done by caller)
  */
 export function getDeformationsForShader() {
-  const shaderDeformations = [];
-
-  for (let i = 0; i < 64; i++) {
-    if (i < deformations.length) {
-      shaderDeformations.push(deformations[i].position.clone());
-    } else {
-      shaderDeformations.push(new THREE.Vector3(0, 0, 0));
-    }
-  }
-
-  return shaderDeformations;
+  return deformations.map(def => def.position.clone());
 }
 
 /**
@@ -217,11 +207,26 @@ export function getLastMoldPoint() {
 
 /**
  * Handle molding at a point
- * @param {THREE.Vector3} point - Surface point
- * @param {boolean} pushing - True for push, false for pull
+ * @param {THREE.Vector3|number} point - Surface point (Vector3) or x coordinate
+ * @param {boolean|number} pushing - True for push, false for pull, or y coordinate if first param is number
+ * @param {number} z - Z coordinate (only used if first param is number)
  */
-export function moldAtPoint(point, pushing = true) {
-  const strength = pushing ? clayPushStrength : -clayPushStrength;
-  addClayDeformation(point, strength);
-  setLastMoldPoint(point);
+export function moldAtPoint(point, pushing = true, z = undefined) {
+  // Handle overload: moldAtPoint(x, y, z) or moldAtPoint(Vector3, pushing)
+  let vectorPoint;
+  let isPushing;
+
+  if (typeof point === 'number' && typeof pushing === 'number') {
+    // Called with moldAtPoint(x, y, z)
+    vectorPoint = new THREE.Vector3(point, pushing, z);
+    isPushing = true;
+  } else {
+    // Called with moldAtPoint(Vector3, pushing)
+    vectorPoint = point;
+    isPushing = pushing;
+  }
+
+  const strength = isPushing ? clayPushStrength : -clayPushStrength;
+  addClayDeformation(vectorPoint, strength);
+  setLastMoldPoint(vectorPoint);
 }

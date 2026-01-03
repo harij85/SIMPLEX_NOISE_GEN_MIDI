@@ -7,8 +7,8 @@
 
 import { getStepParameters } from './stepParameters.js';
 import { getStepMS } from './scheduler.js';
-import { sendNoteOn, sendNoteOff, noiseToMIDINote } from '../midi/midiHandlers.js';
-import { scaleDegreeToMidiNote, isScaleEnabled } from '../utils/scales.js';
+import { sendNoteOn, sendNoteOff, noiseToMIDINote, noiseToMIDINoteWithVelocity } from '../midi/midiHandlers.js';
+import { scaleDegreeToMidiNote, isScaleEnabled, quantizeToScale } from '../utils/scales.js';
 import { MIDI_CONFIG } from '../config/constants.js';
 
 // Sequencer state
@@ -20,6 +20,8 @@ let stepStartTime = 0;
 // Callbacks
 let sampleNoiseCallback = null;
 let onStepCallback = null;
+let sendNoteOnCallback = null;
+let sendNoteOffCallback = null;
 
 /**
  * Set callback for noise sampling
@@ -65,19 +67,22 @@ function scheduleNoiseSequence() {
       continue;
     }
 
-    // Determine note value
+    // Determine note value and velocity
     let note;
+    let velocity;
+
     if (params.scaleDegree !== null && isScaleEnabled()) {
       // Use forced scale degree (I-VII)
       note = scaleDegreeToMidiNote(params.scaleDegree);
+      velocity = params.velocity !== null ? params.velocity : MIDI_CONFIG.DEFAULT_VELOCITY;
     } else {
-      // Use noise value
+      // Use noise value with gradient-based velocity
       const value = noiseValues[i];
-      note = noiseToMIDINote(value);
+      const result = noiseToMIDINoteWithVelocity(value, quantizeToScale);
+      note = result.note;
+      // Use gradient-based velocity unless step has explicit velocity override
+      velocity = params.velocity !== null ? params.velocity : result.velocity;
     }
-
-    // Determine velocity
-    const velocity = params.velocity !== null ? params.velocity : MIDI_CONFIG.DEFAULT_VELOCITY;
 
     // Calculate note duration
     let duration = STEP_MS;
@@ -109,6 +114,14 @@ function scheduleNoiseSequence() {
 
     sendNoteOn(note, velocity, tOn);
     sendNoteOff(note, tOff);
+
+    // Call callbacks for tracker/UI updates
+    if (sendNoteOnCallback) {
+      sendNoteOnCallback(note, velocity, tOn, i);
+    }
+    if (sendNoteOffCallback) {
+      sendNoteOffCallback(note, tOff, i);
+    }
 
     cumulativeTime += STEP_MS;
   }
@@ -206,18 +219,16 @@ export function updateCurrentStep() {
 
 /**
  * Set callback for MIDI note on events from sequencer
- * @param {Function} callback - Callback function(note, velocity, channel)
+ * @param {Function} callback - Callback function(note, velocity, time, stepIndex)
  */
 export function setSendNoteOnCallback(callback) {
-  // Store callback for note on scheduling
-  // This would be used when the sequencer schedules MIDI note on events
+  sendNoteOnCallback = callback;
 }
 
 /**
  * Set callback for MIDI note off events from sequencer
- * @param {Function} callback - Callback function(note, channel)
+ * @param {Function} callback - Callback function(note, time, stepIndex)
  */
 export function setSendNoteOffCallback(callback) {
-  // Store callback for note off scheduling
-  // This would be used when the sequencer schedules MIDI note off events
+  sendNoteOffCallback = callback;
 }

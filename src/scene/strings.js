@@ -43,9 +43,9 @@ export function createTubeString(start, end, index, parentGroup) {
   );
 
   const tubeMaterial = new THREE.MeshBasicMaterial({
-    color: 0xff0000,
+    color: 0xffffff,
     transparent: true,
-    opacity: 0.6
+    opacity: 0.5
   });
 
   const tube = new THREE.Mesh(tubeGeometry, tubeMaterial);

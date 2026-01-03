@@ -14,6 +14,11 @@ const state = {
   currentStep: 0,
   stepStartTime: 0,
 
+  // Timing
+  BPM: SEQUENCER_DEFAULTS.BPM,
+  timeSigNumerator: SEQUENCER_DEFAULTS.TIME_SIG_NUM,
+  timeSigDenominator: SEQUENCER_DEFAULTS.TIME_SIG_DEN,
+
   // Sensor positions
   sensorDistribution: 0.0, // 0 = line, 1 = chaos
   sensorAnimationSpeed: 0.0,
@@ -218,4 +223,68 @@ export function setEditingStep(step) {
  */
 export function getState() {
   return state;
+}
+
+// Timing state management
+/**
+ * Get BPM
+ * @returns {number}
+ */
+export function getBPM() {
+  return state.BPM;
+}
+
+/**
+ * Set BPM
+ * @param {number} bpm
+ */
+export function setBPM(bpm) {
+  state.BPM = Math.max(0, Math.min(240, bpm));
+}
+
+/**
+ * Get time signature as array [numerator, denominator]
+ * @returns {Array<number>}
+ */
+export function getTimeSig() {
+  return [state.timeSigNumerator, state.timeSigDenominator];
+}
+
+/**
+ * Set time signature
+ * @param {Array<number>|number} numerator - [num, den] array or numerator
+ * @param {number} denominator - Denominator (if first param is number)
+ */
+export function setTimeSig(numerator, denominator) {
+  // Handle array argument [numerator, denominator]
+  if (Array.isArray(numerator)) {
+    [numerator, denominator] = numerator;
+  }
+
+  state.timeSigNumerator = Math.max(1, Math.min(256, numerator));
+  state.timeSigDenominator = Math.max(1, Math.min(256, denominator));
+}
+
+/**
+ * Get time signature numerator
+ * @returns {number}
+ */
+export function getTimeSigNumerator() {
+  return state.timeSigNumerator;
+}
+
+/**
+ * Get time signature denominator
+ * @returns {number}
+ */
+export function getTimeSigDenominator() {
+  return state.timeSigDenominator;
+}
+
+/**
+ * Get mouse position (alias for getMouse for backward compatibility)
+ * @returns {Object}
+ */
+export function getMousePosition() {
+  return state.mouse;
 }

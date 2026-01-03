@@ -51,16 +51,25 @@ export function createSamplingMaterial(mainMaterialUniforms, noiseType = 'simple
         vec3 p = vWorldPos * uSpatialScale + vec3(0.0, 0.0, uTime * uTimeScale);
         float noise = noiseFunction(p);
 
-        // Calculate displacement (same as vertex shader)
-        float displacement = noise * uDisplacementAmount;
+        float value;
 
-        // Calculate radial depth
-        vec3 normalizedPos = normalize(vWorldPos);
-        float baseRadius = length(vWorldPos);
-        float actualRadius = baseRadius + displacement;
+        // When displacement is 0, use raw noise value directly
+        if (uDisplacementAmount < 0.0001) {
+          // Map noise from [-1, 1] to [0, 1]
+          value = (noise + 1.0) * 0.5;
+        } else {
+          // Calculate displacement (same as vertex shader)
+          float displacement = noise * uDisplacementAmount;
 
-        // Map radius to [0, 1] range for MIDI
-        float value = (actualRadius - (1.0 - uDisplacementAmount)) / (uDisplacementAmount * 2.0);
+          // Calculate radial depth
+          vec3 normalizedPos = normalize(vWorldPos);
+          float baseRadius = length(vWorldPos);
+          float actualRadius = baseRadius + displacement;
+
+          // Map radius to [0, 1] range for MIDI
+          value = (actualRadius - (1.0 - uDisplacementAmount)) / (uDisplacementAmount * 2.0);
+        }
+
         value = clamp(value, 0.0, 1.0);
 
         // Output the radial depth value

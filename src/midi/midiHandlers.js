@@ -300,16 +300,77 @@ export function sendPitchBend(channel, value) {
 }
 
 /**
- * Map noise value to MIDI note
+ * Map noise value to MIDI note using color gradient zones
+ * Each color zone has its own note range, with center at exact middle
+ * @param {number} value - Noise value (0 to 1)
+ * @param {Function} quantizeCallback - Optional scale quantization function
+ * @returns {{note: number, velocity: number}} MIDI note and velocity
+ */
+export function noiseToMIDINoteWithVelocity(value, quantizeCallback) {
+  const clamped = Math.max(0, Math.min(1, value));
+
+  // Define 5 color zones matching the gradient
+  // Each zone: 0.2 width, center at 0.1, 0.3, 0.5, 0.7, 0.9
+  const zones = [
+    { min: 0.0, max: 0.2, center: 0.1 },  // Color 1
+    { min: 0.2, max: 0.4, center: 0.3 },  // Color 2
+    { min: 0.4, max: 0.6, center: 0.5 },  // Color 3
+    { min: 0.6, max: 0.8, center: 0.7 },  // Color 4
+    { min: 0.8, max: 1.0, center: 0.9 }   // Color 5
+  ];
+
+  // Divide MIDI range into 5 equal zones
+  const totalRange = MIDI_CONFIG.MAX_NOTE - MIDI_CONFIG.MIN_NOTE;
+  const zoneRange = totalRange / 5;
+
+  // Find which zone we're in
+  let zoneIndex = Math.floor(clamped / 0.2);
+  if (zoneIndex >= 5) zoneIndex = 4; // Clamp to last zone
+
+  const zone = zones[zoneIndex];
+
+  // Calculate distance from center of zone (0 = center, 1 = edge)
+  const distanceFromCenter = Math.abs(clamped - zone.center) / 0.1;
+
+  // Determine note range for this zone
+  const zoneMinNote = MIDI_CONFIG.MIN_NOTE + (zoneIndex * zoneRange);
+  const zoneMaxNote = zoneMinNote + zoneRange;
+  const zoneCenterNote = zoneMinNote + (zoneRange / 2);
+
+  let rawNote;
+
+  if (clamped < zone.center) {
+    // Lower half of zone - interpolate from min to center
+    const t = (clamped - zone.min) / (zone.center - zone.min);
+    rawNote = Math.round(zoneMinNote + t * (zoneCenterNote - zoneMinNote));
+  } else {
+    // Upper half of zone - interpolate from center to max
+    const t = (clamped - zone.center) / (zone.max - zone.center);
+    rawNote = Math.round(zoneCenterNote + t * (zoneMaxNote - zoneCenterNote));
+  }
+
+  // Calculate velocity: center = 80, edge = 40
+  const baseVelocity = 80 - (distanceFromCenter * 40);
+
+  // Add ±5% randomization
+  const randomization = (Math.random() - 0.5) * 2 * 0.05; // Range: -0.05 to +0.05
+  const randomizedVelocity = baseVelocity * (1 + randomization);
+
+  // Clamp to valid MIDI velocity range (1-127)
+  const velocity = Math.max(1, Math.min(127, Math.round(randomizedVelocity)));
+
+  const finalNote = quantizeCallback ? quantizeCallback(rawNote) : rawNote;
+
+  return { note: finalNote, velocity };
+}
+
+/**
+ * Map noise value to MIDI note (legacy function, returns only note)
  * @param {number} value - Noise value (0 to 1)
  * @param {Function} quantizeCallback - Optional scale quantization function
  * @returns {number} MIDI note number
  */
 export function noiseToMIDINote(value, quantizeCallback) {
-  const clamped = Math.max(0, Math.min(1, value));
-  const rawNote = Math.round(
-    MIDI_CONFIG.MIN_NOTE + clamped * (MIDI_CONFIG.MAX_NOTE - MIDI_CONFIG.MIN_NOTE)
-  );
-
-  return quantizeCallback ? quantizeCallback(rawNote) : rawNote;
+  const result = noiseToMIDINoteWithVelocity(value, quantizeCallback);
+  return result.note;
 }

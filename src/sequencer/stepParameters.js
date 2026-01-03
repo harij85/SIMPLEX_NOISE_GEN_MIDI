@@ -104,6 +104,11 @@ export function setStepScaleDegree(index, scaleDegree) {
  */
 export function setStepVelocity(index, velocity) {
   if (stepParameters[index]) {
-    stepParameters[index].velocity = velocity;
+    // Clamp velocity to MIDI range (1-127), or null
+    if (velocity !== null && velocity !== undefined) {
+      stepParameters[index].velocity = Math.max(1, Math.min(127, velocity));
+    } else {
+      stepParameters[index].velocity = velocity;
+    }
   }
 }
